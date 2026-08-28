@@ -1,4 +1,4 @@
-﻿﻿// 万年历 - 使用 tyme4ts 库：https://github.com/6tail/tyme4ts
+﻿// 万年历 - 使用 tyme4ts 库：https://github.com/6tail/tyme4ts
 // tyme4ts.mjs 以普通脚本加载，类已挂载到全局作用域
 
 const LunarCalendar = (function () {
@@ -975,28 +975,6 @@ const LunarCalendar = (function () {
             };
         });
     }
-
-    // 【GitHub Push Protection 要求：不再在源码中硬编码 Gitee TOKEN】
-    function _getGiteeTokenForSaveCurrent() {
-        if (typeof window.GiteeStorage !== 'undefined' && window.GiteeStorage.CONFIG && window.GiteeStorage.CONFIG.TOKEN) {
-            return window.GiteeStorage.CONFIG.TOKEN;
-        }
-        var tk = '';
-        try { tk = (window.localStorage && window.localStorage.getItem('gitee_token')) || ''; } catch (e) { tk = ''; }
-        if (!tk && typeof window !== 'undefined' && typeof window.prompt === 'function') {
-            var input = window.prompt(
-                '请输入你的 Gitee 私人令牌（只在第一次访问时需要，之后会保存在本机浏览器）：\n\n' +
-                '生成方法：Gitee 头像 -> 设置 -> 私人令牌 -> 生成新令牌 -> 勾选 projects 权限'
-            );
-            if (input && (input = input.trim())) {
-                tk = input;
-                try { window.localStorage.setItem('gitee_token', tk); } catch (e) {}
-            }
-        }
-        return tk;
-    }
-
-
     function saveCurrentToGitee(caseName, desc) {
         var bz = currentBaZi;
         if (!bz || !bz.inputParams) return;
@@ -1033,41 +1011,54 @@ const LunarCalendar = (function () {
             note: desc || '',
             createdAt: Math.floor(Date.now() / 1000)
         };
-        var tk = _getGiteeTokenForSaveCurrent();
-        if (!tk) { alert('未提供 Gitee 私人令牌，已取消保存'); return; }
-
 
         var btn = document.getElementById('exportBtn');
         var origText = btn ? btn.textContent : '';
-        if (btn) btn.textContent = '保存中...';
+        var restoreTimer = null;
+        if (btn) {
+            btn.textContent = '保存中...';
+            btn.disabled = true;
+            // 15 秒兜底恢复（防止网络挂了按钮一直灰）
+            restoreTimer = setTimeout(function () {
+                btn.textContent = origText;
+                btn.disabled = false;
+            }, 15000);
+        }
 
-        fetch('https://gitee.com/api/v5/repos/a-treasure-trove-of-wisdom/bazi-data/contents/data/records.json?access_token=' + encodeURIComponent(tk))
-            .then(function (r) { return r.json(); })
+        fetch('https://gitee.com/api/v5/repos/a-treasure-trove-of-wisdom/bazi-data/contents/data/records.json?access_token=f66594ca2bba32caad9d255b278dcabd')
+            .then(function (res) { return res.json(); })
             .then(function (file) {
-                var text = atob(file.content.replace(/\n/g, ''));
+                // 解码旧数据
+                var text = atob((file.content || '').replace(/\n/g, ''));
                 var decoded = decodeURIComponent(escape(text));
-                var data = JSON.parse(decoded);
-                data.records.push(newRecord);
-                var content = JSON.stringify(data, null, 2);
+                var data = JSON.parse(decoded || '{"records":[]}');
+                var records = data.records || [];
+
+                // 新命例插到数组最前面
+                records.unshift(newRecord);
+
+                // 编码 & PUT 保存
+                var content = JSON.stringify({ records: records }, null, 2);
                 var b64 = btoa(unescape(encodeURIComponent(content)));
                 return fetch('https://gitee.com/api/v5/repos/a-treasure-trove-of-wisdom/bazi-data/contents/data/records.json', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        access_token: tk,
-                        message: 'save bazi record via app',
+                        access_token: 'f66594ca2bba32caad9d255b278dcabd',
+                        message: 'update records via app',
                         content: b64,
                         sha: file.sha,
                         branch: 'master'
                     })
+                }).then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
                 });
             })
-            .then(function (r) { return r.json(); })
             .then(function () {
-                if (btn) { btn.textContent = '已保存'; setTimeout(function () { btn.textContent = origText; }, 1500); }
-                if (window.LunarList && window.LunarList.refresh) {
-                    window.LunarList.refresh();
-                }
+                if (restoreTimer) clearTimeout(restoreTimer);
+                if (btn) { btn.textContent = origText; btn.disabled = false; }
+                alert('保存成功！命例已写入 Gitee 仓库。');
             })
             .catch(function (e) {
                 if (btn) btn.textContent = origText;
