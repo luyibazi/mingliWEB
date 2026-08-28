@@ -1,0 +1,55 @@
+{
+  "name": "wannianli",
+  "version": "1.0.0",
+  "description": "万年历桌面应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.wannianli.app",
+    "productName": "万年历",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "script.js",
+      "style.css",
+      "dayunliunianliuyue.js",
+      "lib/**/*",
+      "modules/**/*"
+    ],
+    "protocols": [
+      {
+        "name": "万年历",
+        "schemes": ["wannianli"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "万年历-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "万年历-Setup.exe",
+      "shortcutName": "万年历",
+      "uninstallDisplayName": "万年历"
+    }
+  }
+}

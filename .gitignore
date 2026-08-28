@@ -1,0 +1,36 @@
+# ============= Node / Electron / npm =============
+node_modules/
+.npm-cache/
+.npm/
+
+# ============= Electron 打包产物（二进制大文件，不上传）=============
+release/
+release-new/
+dist/
+build-output/
+out/
+
+# ============= Electron 缓存（本地）=============
+.electron-cache/
+electron-cache/
+
+# ============= 操作系统 / 编辑器 =============
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============= 调试产物 / 临时文件 / 备份 =============
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+script.js.bak
+debug-dayun.mjs
+read.md
+builder-debug.yml
+builder-effective-config.yaml
+*.blockmap

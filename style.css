@@ -1,0 +1,669 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #fff;
+    color: #000;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+}
+
+.top-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    display: flex;
+    gap: 12px;
+    margin: 0 -30px 20px -30px;
+    padding: 18px 30px;
+    border-bottom: 2px solid #000;
+}
+
+.top-nav-btn {
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    font-size: 16px;
+    padding: 10px 30px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.top-nav-btn:hover {
+    background: #000;
+    color: #fff;
+}
+
+.top-nav-btn.active {
+    background: #000;
+    color: #fff;
+}
+
+/* 列表视图 */
+.list-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.list-toolbar h2 {
+    font-size: 18px;
+    font-weight: normal;
+}
+
+.list-content {
+    min-height: 200px;
+}
+
+.list-loading {
+    text-align: center;
+    color: #999;
+    padding: 40px 0;
+}
+
+.list-empty {
+    text-align: center;
+    color: #999;
+    padding: 40px 0;
+}
+
+.list-item {
+    border: 1px solid #ddd;
+    padding: 12px 15px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    transition: background 0.15s;
+}
+
+.list-item:hover {
+    background: #f5f5f5;
+}
+
+.list-item-info {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    align-items: center;
+    min-width: 0;
+}
+
+.list-item-name {
+    font-weight: bold;
+    font-size: 15px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.list-item-gender {
+    font-size: 13px;
+    color: #666;
+    border: 1px solid #ccc;
+    padding: 1px 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.list-item-bazi {
+    font-size: 14px;
+    letter-spacing: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+}
+
+.list-item-solar {
+    font-size: 13px;
+    color: #666;
+    flex-shrink: 0;
+}
+
+.list-item-note {
+    font-size: 12px;
+    color: #999;
+    width: 100%;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    line-height: 1.4;
+}
+
+.list-item-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.list-item-actions button {
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    font-size: 12px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.list-item-actions button:hover {
+    background: #000;
+    color: #fff;
+}
+
+.container {
+    background: #fff;
+    border: 1px solid #000;
+    padding: 30px;
+    width: 100%;
+    max-width: 1100px;
+}
+
+h1 {
+    text-align: center;
+    color: #000;
+    margin-bottom: 24px;
+    font-size: 24px;
+    letter-spacing: 4px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 16px;
+}
+
+.year-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid #000;
+    margin-bottom: 20px;
+}
+
+.nav-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-btn:hover {
+    background: #000;
+    color: #fff;
+}
+
+.year-display {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.year-display label {
+    font-size: 15px;
+    color: #000;
+}
+
+.current-year {
+    font-size: 18px;
+    font-weight: bold;
+    min-width: 50px;
+    display: inline-block;
+    text-align: center;
+    border: 1px solid #000;
+    padding: 2px 10px;
+}
+
+.ganzhi-info {
+    font-size: 15px;
+    color: #000;
+    min-width: 120px;
+}
+
+.grid-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+}
+
+.toggle-btn {
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    font-size: 13px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+.toggle-btn:hover {
+    background: #000;
+    color: #fff;
+}
+
+.year-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 0;
+    border: 1px solid #000;
+    border-right: none;
+    border-bottom: none;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+    max-height: 1000px;
+    overflow: hidden;
+}
+
+.year-grid.collapsed {
+    display: none;
+}
+
+.year-cell {
+    border-right: 1px solid #000;
+    border-bottom: 1px solid #000;
+    padding: 6px 2px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    transition: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.year-num {
+    font-size: 14px;
+}
+
+.year-ganzhi {
+    font-size: 11px;
+}
+
+.year-cell:hover {
+    background: #f0f0f0;
+}
+
+.year-cell.selected {
+    background: #000;
+    color: #fff;
+    font-weight: bold;
+}
+
+.year-info {
+    padding: 16px;
+    border: 1px solid #000;
+    line-height: 1.8;
+}
+
+.year-info h2 {
+    color: #000;
+    margin-bottom: 12px;
+    font-size: 18px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 8px;
+}
+
+.info-list {
+    display: flex;
+    gap: 20px;
+}
+
+.info-item {
+    font-size: 14px;
+}
+
+.info-item .value {
+    color: #000;
+}
+
+.calendar-grid {
+    display: grid;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    padding-bottom: 12px;
+    overflow-x: auto;
+}
+
+.calendar-cell {
+    font-size: 12px;
+    color: #000;
+    text-align: center;
+    padding: 3px 6px;
+    min-width: 50px;
+    border-right: 1px solid #000;
+    border-bottom: 1px solid #000;
+    white-space: nowrap;
+}
+
+.calendar-cell.day-cell {
+    font-size: 10px;
+}
+
+.calendar-cell.clickable {
+    cursor: pointer;
+}
+
+.calendar-cell.clickable.hover {
+    background: #f0f0f0;
+}
+
+.calendar-cell.clickable.selected {
+    background: #000;
+    color: #fff;
+}
+
+.calendar-cell.label {
+    font-weight: bold;
+    text-align: left;
+    padding-left: 0;
+    padding-right: 12px;
+    min-width: 40px;
+    border-right: 1px solid #000;
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background: #fff;
+}
+
+.calendar-cell.span-2 {
+    grid-column: span 2;
+    font-size: 13px;
+}
+
+.calendar-cell.jieqi-cell {
+    padding: 2px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.jieqi-name {
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.jieqi-time {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.zodiac {
+    display: inline-block;
+    font-size: 20px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.time-input-area {
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid #000;
+}
+
+.time-info {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.time-info span {
+    padding: 4px 8px;
+    border: 1px solid #000;
+}
+
+.time-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.time-select select,
+.time-select input {
+    padding: 4px 8px;
+    border: 1px solid #000;
+    background: #fff;
+    font-size: 14px;
+}
+
+.shiChen-display {
+    padding: 4px 8px;
+    border: 1px solid #000;
+    font-weight: bold;
+    min-width: 80px;
+    display: inline-block;
+    text-align: center;
+}
+
+.time-actions {
+    margin-top: 10px;
+}
+
+.time-actions button {
+    padding: 6px 20px;
+    border: 1px solid #000;
+    background: #fff;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.time-actions button:hover:not(:disabled) {
+    background: #000;
+    color: #fff;
+}
+
+.time-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.bazi-area {
+    margin-top: 16px;
+}
+
+.bazi-table {
+    border-collapse: collapse;
+    /* border: 1px solid #000; */
+}
+
+.bazi-table th,
+.bazi-table td {
+    border: 1px solid #000;
+    padding: 8px 20px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.bazi-table th {
+    font-weight: bold;
+}
+
+.bazi-table td {
+    font-size: 16px;
+}
+
+.bazi-layout {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+}
+
+.siling-box {
+    border: 1px solid #000;
+    padding: 10px 20px;
+    min-width: 120px;
+}
+
+.siling-title {
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 4px;
+}
+
+.siling-content {
+    text-align: center;
+    font-size: 16px;
+}
+
+.dayun-area {
+    /* margin-top: 16px;
+    padding-top: 16px; */
+    /* border-top: 1px solid #000; */
+    overflow-x: auto;
+}
+.dayun-table {
+    border-collapse: collapse;
+    /* border: 1px solid #000; */
+}
+
+.dayun-table th,
+.dayun-table td {
+    padding: 6px 14px;
+    font-size: 13px;
+    /* white-space: nowrap; */
+}
+
+.dayun-table tr:first-child th {
+    font-size: 14px;
+}
+
+
+
+.dayun-cell {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+
+
+.dayun-cell:hover,
+.dayun-cell.hover {
+    background: #f0f0f0;
+}
+
+.dayun-cell[data-dayun-index="pre"] {
+    /* font-weight: bold; */
+}
+
+.dayun-cell.selected {
+    background: #000;
+    color: #fff;
+}
+.liunian-cell {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.liunian-cell:hover,
+.liunian-cell.hover {
+    background: #f0f0f0;
+}
+
+.liunian-cell.selected {
+    background: #000;
+    color: #fff;
+}
+
+.dayun-title {
+    font-weight: bold;
+    text-align: center;
+    padding: 6px 14px;
+    font-size: 14px;
+    border: 1px solid #000;
+}
+
+#liuNianArea {
+    margin-top: 12px;
+}
+
+.liunian-table {
+    border-collapse: collapse;
+    /* border: 1px solid #000; */
+}
+
+.liunian-table th,
+.liunian-table td {
+    /* border: 1px solid #000; */
+    padding: 6px 12px;
+    text-align: center;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.liunian-table th {
+    /* font-weight: bold; */
+}
+
+.liunian-table tr:nth-child(2) td,
+.liunian-table tr:nth-child(3) td {
+    /* font-weight: bold; */
+}
+
+.liuyue-table {
+    border-collapse: collapse;
+}
+
+.liuyue-table th,
+.liuyue-table td {
+    /* border: 1px solid #000; */
+    padding: 6px 12px;
+    text-align: center;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.liuyue-table th {
+    font-weight: bold;
+}
+
+.liunian-title {
+    font-weight: bold;
+    text-align: center;
+    padding: 6px 12px;
+    font-size: 14px;
+    border: 1px solid #000;
+}
+
+.liunian-empty {
+    padding: 12px;
+    border: 1px solid #000;
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+}
+
+.export-btn {
+    padding: 6px 16px;
+    font-size: 14px;
+    border: 1px solid #000;
+    background: #fff;
+    cursor: pointer;
+}
+
+.export-btn:hover {
+    background: #000;
+    color: #fff;
+}

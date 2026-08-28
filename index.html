@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>万年历</title>
+    <link rel="stylesheet" href="style.css?v=20260826a">
+</head>
+<body>
+    <div class="container">
+        <h1>万年历</h1>
+
+        <!-- 顶部导航 -->
+        <div class="top-nav">
+            <button id="navCalendar" class="top-nav-btn active">万年历</button>
+            <button id="navList" class="top-nav-btn">列表</button>
+        </div>
+
+        <!-- 万年历视图 -->
+        <div id="calendarView" class="view-section">
+            <!-- 年份选择区域 -->
+            <div class="year-selector">
+                <button id="prevYear" class="nav-btn" title="上一年">&lt;</button>
+
+                <div class="year-display">
+                    <span>年份：</span>
+                    <span id="currentYearText" class="current-year">2026</span>
+                    <span id="ganZhi" class="ganzhi-info"></span>
+                </div>
+
+                <button id="nextYear" class="nav-btn" title="下一年">&gt;</button>
+            </div>
+
+            <!-- 年份列表（每排10个） -->
+            <div class="grid-header">
+                <button id="toggleGrid" class="toggle-btn" title="收起年份列表">收起 ↓</button>
+            </div>
+            <div id="yearGrid" class="year-grid"></div>
+
+            <!-- 选中年份信息预览 -->
+            <div id="yearInfo" class="year-info"></div>
+        </div>
+
+        <!-- 列表视图 -->
+        <div id="listView" class="view-section" style="display:none;">
+            <div class="list-toolbar">
+                <h2>命例列表</h2>
+                <button id="refreshList" class="toggle-btn">刷新</button>
+            </div>
+            <div id="listContent" class="list-content">
+                <p class="list-loading">正在从云端加载数据...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="lib/tyme4ts.mjs?v=20260828a"></script>
+    <script src="dayunliunianliuyue.js"></script>
+
+    <!-- 模块：数据存储 -->
+    <script src="modules/storage.js"></script>
+    <!-- 模块：UI 工具 -->
+    <script src="modules/ui.js"></script>
+    <!-- 模块：缓存管理 -->
+    <script src="modules/cache.js"></script>
+    <!-- 模块：命例列表 -->
+    <script src="modules/list.js"></script>
+    <!-- 模块：导航切换 -->
+    <script src="modules/navigation.js"></script>
+    <!-- 模块：事件记录 -->
+    <script src="modules/notes.js?v=20260828e"></script>
+    <!-- 模块：案例详情 -->
+    <script src="modules/detail.js?v=20260828g"></script>
+
+    <!-- 入口文件 -->
+    <script src="script.js?v=20260828b"></script>
+</body>
+</html>
