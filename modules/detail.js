@@ -374,7 +374,7 @@
             '</div>' +
             '<div style="max-height:70vh;overflow-y:auto;padding-right:6px;">' +
             '<div class="dt-tab-panel dt-tab-panel-active" id="dtPanelBasic">' +
-            basicHtml + noteHtml +
+            basicHtml + baziBlockHtml + noteHtml +
             '</div>' +
             '<div class="dt-tab-panel" id="dtPanelNotes">' +
             baziBlockHtml + yunshiHtml + oldDataHint +
