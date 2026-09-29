@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>八字排盘</title>
+    <link rel="stylesheet" href="style.css?v=20260930b">
+    <style>
+        /* 覆盖 style.css 中为主页面设计的 body 样式：
+           padding:40px、min-height:100vh、flex 会导致 iframe 内部出现滚动条。
+           本页作为 iframe 子页，高度必须完全由内容决定，滚动交给外层页面。 */
+        body {
+            min-height: 0 !important;
+            padding: 0 !important;
+            display: block !important;
+            overflow: hidden;
+            background: #f4f5f7;
+        }
+    </style>
+</head>
+<body>
+    <!-- 八字结果区（独立页面）：由 bazi.js 根据 URL 参数计算并渲染 -->
+    <div id="baziContainer" class="bazi-container"></div>
+
+    <script src="lib/tyme4ts.mjs?v=20260929c"></script>
+    <script src="dayunliunianliuyue.js?v=20260929c"></script>
+    <script src="bazi.js?v=20260930a"></script>
+</body>
+</html>
