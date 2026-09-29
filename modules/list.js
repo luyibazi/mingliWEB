@@ -142,7 +142,6 @@
                 '</div>' +
                 '<div class="list-item-actions">' +
                 '<button onclick="LunarList.detailRecord(\'' + r.id + '\')">详细</button>' +
-                '<button onclick="LunarList.showNotesRecord(\'' + r.id + '\')">事件</button>' +
                 '<button onclick="LunarList.deleteRecord(\'' + r.id + '\')">删除</button>' +
                 '</div>' +
                 '</div>';

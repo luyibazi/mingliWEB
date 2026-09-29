@@ -28,10 +28,10 @@
         function makePillar(stem, branch, label) {
             if (!stem || !branch) return '';
             return '<div style="display:flex;flex-direction:column;align-items:center;min-width:36px;">' +
-                   (label ? '<div style="font-size:10px;color:#888;margin-bottom:3px;">' + label + '</div>' : '') +
-                   '<div style="font-size:18px;font-weight:bold;line-height:1.2;color:#000;">' + stem + '</div>' +
-                   '<div style="border-top:1px solid #000;width:100%;margin:2px 0;"></div>' +
-                   '<div style="font-size:18px;font-weight:bold;line-height:1.2;color:#000;">' + branch + '</div>' +
+                   (label ? '<div style="font-size:10px;color:#8f959e;margin-bottom:3px;">' + label + '</div>' : '') +
+                   '<div style="font-size:18px;font-weight:bold;line-height:1.2;color:#1f2329;">' + stem + '</div>' +
+                   '<div style="border-top:1px solid #e0e1e5;width:100%;margin:3px 0;"></div>' +
+                   '<div style="font-size:18px;font-weight:bold;line-height:1.2;color:#1f2329;">' + branch + '</div>' +
                    '</div>';
         }
         function parseGZ(gz) {
@@ -46,42 +46,127 @@
         var mStem = parseGZ(monthGZ)[0], mBranch = parseGZ(monthGZ)[1];
         var dStem = parseGZ(dayGZ)[0], dBranch = parseGZ(dayGZ)[1];
         var hStem = parseGZ(hourGZ)[0], hBranch = parseGZ(hourGZ)[1];
+        // 日柱标签按性别显示「元男 / 元女」
+        var isMale = (fb && fb.inputParams && fb.inputParams.gender)
+            ? fb.inputParams.gender === 'male'
+            : String(record.gender || '').indexOf('男') >= 0;
+        var dayLabel = isMale ? '元男' : '元女';
         var baziHtml = '<div style="display:flex;gap:14px;margin-top:8px;">' +
             makePillar(yStem, yBranch, '年柱') +
             makePillar(mStem, mBranch, '月柱') +
-            makePillar(dStem, dBranch, '日柱') +
+            makePillar(dStem, dBranch, dayLabel) +
             makePillar(hStem, hBranch, '时柱') +
             '</div>';
 
         var basicHtml =
-            '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #ccc;">' +
+            '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f1f2f4;">' +
             '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
-            '<input id="dtNameInput" value="' + (record.name || '未命名案例') + '" style="font-size:16px;font-weight:bold;border:1px solid #ccc;padding:4px 6px;margin-right:10px;font-family:inherit;outline:none;background:#fff;min-width:200px;" onfocus="this.select()">' +
-            '<span style="font-size:13px;font-weight:normal;border:1px solid #000;padding:1px 8px;">' + (record.gender || '') + '</span></div>' +
-            '<div style="font-size:12px;color:#666;">创建时间：' + ts + '</div>' +
-            '</div>' +
+            '<input id="dtNameInput" value="' + (record.name || '未命名案例') + '" style="font-size:16px;font-weight:bold;border:1px solid transparent;padding:4px 6px;margin-right:10px;font-family:inherit;outline:none;background:transparent;color:#1f2329;min-width:200px;border-radius:6px;transition:all .15s;" onfocus="this.style.borderColor=\'#d8d8dc\';this.style.background=\'#fff\';this.select()" onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\'">' +
+            '<span style="font-size:12px;font-weight:normal;background:#f2f3f5;color:#646a73;padding:2px 10px;border-radius:999px;">' + (record.gender || '') + '</span></div>' +
+            '<div style="font-size:12px;color:#8f959e;">创建时间：' + ts + '</div>' +
+            '</div>';
+
+        // 司令/胎元/交运：保存端已不再落库这几个派生字段，
+        // 缺失时用出生信息（inputParams → record 字段）现场重算；老记录仍优先用已存值
+        var derivedInfo = (function () {
+            var out = {
+                siLing: (fb && fb.siLing) || '',
+                taiYuan: (fb && fb.taiYuan) || '',
+                jiaoYun: (fb && fb.jiaoYun) || null
+            };
+            if (out.siLing && out.taiYuan && out.jiaoYun) return out;
+            if (!global.BaZiCalc) return out;
+
+            var seed = null;
+            if (fb && fb.inputParams && fb.inputParams.year != null && fb.inputParams.month != null && fb.inputParams.day != null) {
+                seed = {
+                    year: Number(fb.inputParams.year),
+                    month: Number(fb.inputParams.month),
+                    day: Number(fb.inputParams.day),
+                    hour: Number(fb.inputParams.hour) || 12,
+                    minute: Number(fb.inputParams.minute != null ? fb.inputParams.minute : 0),
+                    gender: normalizeGender(fb.inputParams.gender)
+                };
+            } else {
+                seed = assembleSeedFromRecord();
+            }
+            if (!seed) return out;
+            if (!seed.gender) seed.gender = normalizeGender(record.gender || (fb && fb.qianKun)) || 'male';
+
+            try {
+                var genderCode = seed.gender === 'male' ? 1 : 0;
+                if (!out.siLing && global.BaZiCalc.getSiLingFromRysl && typeof SolarTime !== 'undefined') {
+                    out.siLing = global.BaZiCalc.getSiLingFromRysl(
+                        SolarTime.fromYmdHms(seed.year, seed.month, seed.day, seed.hour, seed.minute, 0)
+                    );
+                }
+                if (!out.taiYuan && global.BaZiCalc.getTaiYuan) {
+                    out.taiYuan = global.BaZiCalc.getTaiYuan(seed);
+                }
+                if (!out.jiaoYun && global.BaZiCalc.getJiaoYunInfo) {
+                    out.jiaoYun = global.BaZiCalc.getJiaoYunInfo(seed, genderCode).jiaoYun;
+                }
+            } catch (e) { }
+
+            return out;
+        })();
+
+        // 公历/农历/时辰/司令/胎元/交运文字行。
+        // 内嵌排盘可用时这些信息由排盘卡片承担，此处不再渲染，避免同一页出现两遍。
+        var infoLinesHtml =
             '<div style="line-height:1.9;font-size:13px;">' +
             '<div>公历：' + (fb ? (fb.solarDate + ' ' + (fb.shiChen || '')) : (record.solar || '')) + '</div>' +
             '<div>农历：' + (fb ? (fb.lunarDate + ' ' + (fb.shiChen || '')) : '-') + '</div>' +
             (fb && fb.shiChen ? '<div>时辰：' + fb.shiChen + '</div>' : '') +
-            (fb && fb.siLing ? '<div>司令：' + fb.siLing + '</div>' : '') +
-            (fb && fb.taiYuan ? '<div>胎元：' + fb.taiYuan + '</div>' : '') +
-            (fb && fb.jiaoYun ? '<div>交运：' + fb.jiaoYun.jieQi + fb.jiaoYun.days + '天' + fb.jiaoYun.hours + '小时（' + fb.jiaoYun.jiaoYunGan + '）</div>' : '') +
+            (derivedInfo.siLing ? '<div>司令：' + derivedInfo.siLing + '</div>' : '') +
+            (derivedInfo.taiYuan ? '<div>胎元：' + derivedInfo.taiYuan + '</div>' : '') +
+            (derivedInfo.jiaoYun ? '<div>交运：' + derivedInfo.jiaoYun.jieQi + derivedInfo.jiaoYun.days + '天' + derivedInfo.jiaoYun.hours + '小时（' + derivedInfo.jiaoYun.jiaoYunGan + '）</div>' : '') +
             '</div>';
 
+        // 描述块：位于基本信息与四柱之间
         var noteHtml =
-            '<div style="margin-top:12px;padding:8px;border:1px solid #ccc;">' +
-            '<div style="font-size:12px;color:#666;margin-bottom:4px;">描述：</div>' +
-            '<textarea id="dtNoteInput" style="width:100%;box-sizing:border-box;border:1px solid #ccc;padding:8px;font-size:13px;line-height:1.7;min-height:60px;resize:none;overflow:hidden;font-family:inherit;outline:none;background:#fff;">' +
+            '<div style="margin-bottom:14px;padding:10px 12px;border:1px solid #e8e8ec;border-radius:10px;background:#fafafb;">' +
+            '<div style="font-size:12px;color:#8f959e;margin-bottom:5px;">描述</div>' +
+            '<textarea id="dtNoteInput" style="width:100%;box-sizing:border-box;border:1px solid #d8d8dc;border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.7;min-height:60px;resize:none;overflow:hidden;font-family:inherit;outline:none;background:#fff;transition:border-color .15s, box-shadow .15s;">' +
             (record.note || '') +
             '</textarea>' +
             '<div style="display:flex;justify-content:flex-end;align-items:center;margin-top:8px;gap:12px;">' +
-            '<div id="dtNoteSaveTip" style="font-size:12px;color:#666;display:none;">✓ 已保存</div>' +
-            '<button id="dtSaveNoteBtn" style="border:2px solid #000;background:#000;color:#fff;padding:6px 24px;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:1px;">保存信息</button>' +
+            '<div id="dtNoteSaveTip" style="font-size:12px;color:#8f959e;display:none;">✓ 已保存</div>' +
+            '<button id="dtSaveNoteBtn" style="border:1px solid #1a1a1a;background:#1a1a1a;color:#fff;padding:6px 22px;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:1px;border-radius:8px;transition:background .15s;">保存信息</button>' +
             '</div>' +
             '</div>';
 
-        var baziBlockHtml = '<div style="margin-top:12px;padding:10px 12px;border:1px solid #000;background:#fff;">' + baziHtml + '</div>';
+        var baziBlockHtml = '<div style="margin-top:12px;padding:10px 12px;border:1px solid #e8e8ec;border-radius:10px;background:#fff;">' + baziHtml + '</div>';
+
+        // ===== 内嵌排盘（复用 bazi.html）=====
+        // 案例里已存有出生信息（fullBazi.inputParams，缺失时回退到 record 顶层字段），
+        // 因此可以直接拼 URL 复用已封装好的排盘页。
+        // embed=1 的语义见 bazi.js：内容与万年历大页面一致（四柱 + 司令/胎元/交运 + 大运/流年/流月 + 选中面板），
+        // 仅隐藏"复制八字/保存"按钮（保存会往 Gitee 新增命例）。
+        function buildEmbedSrc() {
+            var s = null;
+            var ip = fb && fb.inputParams;
+            if (ip && ip.year != null && ip.month != null && ip.day != null) {
+                s = {
+                    year: Number(ip.year), month: Number(ip.month), day: Number(ip.day),
+                    hour: ip.hour != null ? Number(ip.hour) : 0,
+                    minute: ip.minute != null ? Number(ip.minute) : 0,
+                    gender: normalizeGender(ip.gender)
+                };
+            } else if (record.year != null && record.month != null && record.day != null) {
+                s = {
+                    year: Number(record.year), month: Number(record.month), day: Number(record.day),
+                    hour: Number(record.hour) || 0,
+                    minute: Number(record.minute) || 0,
+                    gender: normalizeGender(record.gender || (fb && fb.qianKun))
+                };
+            }
+            if (!s || !s.year || !s.month || !s.day) return '';
+            if (!s.gender) s.gender = 'male';
+            return 'bazi.html?embed=1&y=' + s.year + '&m=' + s.month + '&d=' + s.day +
+                   '&h=' + s.hour + '&min=' + s.minute + '&g=' + s.gender;
+        }
+        var embedSrc = buildEmbedSrc();
 
         var yunshiHtml = '';
         var allPhase = null;
@@ -158,7 +243,7 @@
                     })(record.solar, _p);
                     var dayunData = global.BaZiCalc.findYearsByGanZhi(
                         _dt0,
-                        record.fullBazi.jiaoYun.yearGan,
+                        derivedInfo.jiaoYun ? derivedInfo.jiaoYun.yearGan : undefined,
                         record.bazi.month,
                         _dtShunNi,
                         _dtGender
@@ -207,54 +292,18 @@
                 liunians: []
             };
 
-            var dayunCards = '';
-            let by = global.BaZiCalc.getBirthYear(dtDateZhuanhuan(record.solar));
-
-            dayunCards +=
-                '<div class="dt-dayun-card" data-dayun-index="pre">' +
-                '<div class="dt-year-line">' + (by || '-') + '</div>' +
-                '<div class="dt-sub-line">' + (prePhase.labelAge ? prePhase.labelAge + '岁' : '童限') + '</div>' +
-                '<div class="dt-ganzhi-line">小运</div>' +
-                '</div>';
-
-            phases.slice(0, 12).forEach(function (ph, i) {
-                var idx = i + 1;
-                dayunCards +=
-                    '<div class="dt-dayun-card" data-dayun-index="' + idx + '">' +
-                    '<div class="dt-year-line">' + (ph.starYear || '-') + '</div>' +
-                    '<div class="dt-sub-line">' + (ph.startAge || '-') + '岁</div>' +
-                    '<div class="dt-ganzhi-line">' + (ph.dayunganzhi || '-') + '</div>' +
-                    '</div>';
-            });
-
-            dayunCards += '<div class="dt-dayun-card dt-empty"></div>';
-
+            // 「编辑事件」Tab = 事件步骤器：整页只显示全部已录入事件的时间线，
+            // 点击任一条目即可编辑。添加新事件走「基本信息」页排盘的双击。
             yunshiHtml =
-                '<div class="dt-yunshi-layout" id="dtYunshiLayout">' +
-                '<div class="dt-yunshi-col dt-yunshi-left">' +
-                '<div class="dt-block-title">大运阶段</div>' +
-                '<div class="dt-dayun-grid" id="dtDayunGrid">' + dayunCards + '</div>' +
                 '<div class="dt-notes-block" id="dtNotesBlock" style="min-height:300px;">' +
-                '<div class="dt-block-title">事件记录（双击上方卡片添加）</div>' +
+                '<div class="dt-block-title">事件记录（在「基本信息」页的排盘上双击大运/流年/流月添加）</div>' +
                 '<div class="dt-notes-box" id="dtNotesBox"></div>' +
-                '</div>' +
-                '</div>' +
-                '<div class="dt-yunshi-col dt-yunshi-right">' +
-                '<div class="dt-block">' +
-                '<div class="dt-block-title" id="dtLiuNianTitle">流年</div>' +
-                '<div id="dtLiuNianArea"></div>' +
-                '</div>' +
-                '<div class="dt-block dt-block-bottom">' +
-                '<div class="dt-block-title" id="dtLiuYueTitle">流月</div>' +
-                '<div id="dtLiuYueArea"></div>' +
-                '</div>' +
-                '</div>' +
                 '</div>';
         }
 
         var oldDataHint = '';
         if (!hasFullData) {
-            var tipBorder = 'margin-top:12px;padding:8px;border:1px dashed #999;color:#666;font-size:12px;line-height:1.7;';
+            var tipBorder = 'margin-top:12px;padding:10px 12px;border:1px dashed #d8d8dc;border-radius:8px;color:#646a73;font-size:12px;line-height:1.7;background:#fafafb;';
             if (_buildInput) {
                 var msg = '尝试重算大运数据，但未成功。请回到万年历页面，手动排盘后再保存一次。';
                 if (_buildErrMsg) {
@@ -277,76 +326,53 @@
             var s = document.createElement('style');
             s.id = styleId;
 
-            s.textContent = '#detailDialog .dt-yunshi-layout { display: flex; gap: 18px; margin-top: 16px; }\n';
-            s.textContent += '#detailDialog .dt-yunshi-col    { display: flex; flex-direction: column; min-width: 0; }\n';
-            s.textContent += '#detailDialog .dt-yunshi-left   { flex: 0 0 58%; gap: 16px; }\n';
-            s.textContent += '#detailDialog .dt-yunshi-right  { flex: 1 1 auto; }\n';
-            s.textContent += '#detailDialog .dt-block         { min-height: 0; }\n';
-            s.textContent += '#detailDialog #dtLiuNianArea    { min-height: 120px; }\n';
-            s.textContent += '#detailDialog #dtLiuYueArea     { min-height: 100px; }\n';
-            s.textContent += '#detailDialog .dt-block-bottom  { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #999; }\n';
+            s.textContent += '#detailDialog .dt-block-title { font-size: 13px; font-weight: bold; padding: 0 2px 8px 2px; border-bottom: 1px solid #f1f2f4; margin-bottom: 12px; letter-spacing: 1px; color: #1f2329; }\n';
 
-            s.textContent += '#detailDialog .dt-block-title { font-size: 13px; font-weight: bold; padding: 0 2px 6px 2px; border-bottom: 1px solid #000; margin-bottom: 12px; letter-spacing: 1px; }\n';
+            s.textContent += '#detailDialog .dt-empty-tip     { border: 1px dashed #d8d8dc; border-radius: 8px; padding: 14px 8px; font-size: 12px; color: #8f959e; text-align: center; background: #fafafb; }\n';
 
-            s.textContent += '#detailDialog .dt-dayun-grid    { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }\n';
-            s.textContent += '#detailDialog .dt-dayun-card    { border: 1px solid #000; background: #fff; padding: 10px 6px; cursor: pointer; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; }\n';
-            s.textContent += '#detailDialog .dt-dayun-card.dt-empty  { border: 1px dashed #ccc; background: transparent; cursor: default; opacity: 0; pointer-events: none; }\n';
-            s.textContent += '#detailDialog .dt-dayun-card.dt-hover  { background: #f0f0f0; }\n';
-            s.textContent += '#detailDialog .dt-dayun-card.dt-current{ border: 1px solid #000; background: #fafafa; box-shadow: inset 3px 0 0 0 #000, inset 0 0 0 1px #000; }\n';
-
-            s.textContent += '#detailDialog .dt-liunian-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }\n';
-            s.textContent += '#detailDialog .dt-liunian-card  { border: 1px solid #000; background: #fff; padding: 10px 6px; cursor: pointer; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; }\n';
-            s.textContent += '#detailDialog .dt-liunian-card.dt-hover  { background: #f0f0f0; }\n';
-            s.textContent += '#detailDialog .dt-liunian-card.dt-current{ border: 1px solid #000; background: #fafafa; box-shadow: inset 0 0 0 1px #000; }\n';
-
-            s.textContent += '#detailDialog .dt-liuyue-grid   { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }\n';
-            s.textContent += '#detailDialog .dt-liuyue-card   { border: 1px solid #000; background: #fff; padding: 8px 5px; cursor: pointer; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; }\n';
-            s.textContent += '#detailDialog .dt-liuyue-card.dt-hover  { background: #f0f0f0; }\n';
-            s.textContent += '#detailDialog .dt-liuyue-card.dt-current{ border: 1px solid #000; background: #fafafa; box-shadow: inset 0 0 0 1px #000; }\n';
-
-            s.textContent += '#detailDialog .dt-year-line     { font-size: 14px; font-weight: bold; line-height: 1.4; }\n';
-            s.textContent += '#detailDialog .dt-jieqi-line    { font-size: 13px; font-weight: bold; line-height: 1.4; }\n';
-            s.textContent += '#detailDialog .dt-sub-line      { font-size: 11px; color: #666; line-height: 1.4; }\n';
-            s.textContent += '#detailDialog .dt-date-line     { font-size: 11px; color: #666; line-height: 1.4; }\n';
-            s.textContent += '#detailDialog .dt-ganzhi-line   { font-size: 13px; line-height: 1.4; letter-spacing: 2px; }\n';
-
-            s.textContent += '#detailDialog .dt-empty-tip     { border: 1px dashed #ccc; padding: 12px 8px; font-size: 12px; color: #999; text-align: center; background: #fafafa; }\n';
-
-            s.textContent += '#detailDialog .dt-notes-block     { margin-top: 0; border: 1px solid #000; background: #fff; padding: 12px 14px; flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; }\n';
+            s.textContent += '#detailDialog .dt-notes-block     { margin-top: 0; border: 1px solid #e8e8ec; border-radius: 12px; background: #fff; padding: 14px 16px; flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; }\n';
             s.textContent += '#detailDialog .dt-notes-box       { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0; min-height: 0; overflow-y: auto; padding-left: 0; }\n';
             s.textContent += '#detailDialog .dt-timeline       { position: relative; padding-left: 18px; }\n';
-            s.textContent += '#detailDialog .dt-timeline::before { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: #000; }\n';
+            s.textContent += '#detailDialog .dt-timeline::before { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: #e8e8ec; }\n';
             s.textContent += '#detailDialog .dt-tl-item        { position: relative; padding-bottom: 14px; }\n';
             s.textContent += '#detailDialog .dt-tl-item:last-child { padding-bottom: 0; }\n';
-            s.textContent += '#detailDialog .dt-tl-node        { position: absolute; left: -18px; top: 3px; width: 10px; height: 10px; background: #000; }\n';
+            s.textContent += '#detailDialog .dt-tl-node        { position: absolute; left: -18px; top: 3px; width: 10px; height: 10px; background: #1a1a1a; border-radius: 3px; }\n';
             s.textContent += '#detailDialog .dt-tl-dy .dt-tl-node { width: 12px; height: 12px; left: -19px; top: 2px; }\n';
-            s.textContent += '#detailDialog .dt-tl-ln .dt-tl-node { width: 8px; height: 8px; left: -17px; top: 3px; background: #555; }\n';
-            s.textContent += '#detailDialog .dt-tl-ly .dt-tl-node { width: 6px; height: 6px; left: -16px; top: 4px; background: #999; border-radius: 50%; }\n';
-            s.textContent += '#detailDialog .dt-tl-title      { font-size: 12px; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 3px; color: #000; line-height: 1.5; }\n';
-            s.textContent += '#detailDialog .dt-tl-content    { font-size: 13px; line-height: 1.7; color: #333; white-space: pre-wrap; word-break: break-word; padding-left: 0; }\n';
-            s.textContent += '#detailDialog .dt-tl-ln         { margin-left: 16px; padding-left: 14px; border-left: 1px solid #aaa; }\n';
-            s.textContent += '#detailDialog .dt-tl-ly         { margin-left: 32px; padding-left: 14px; border-left: 1px dashed #ccc; }\n';
+            s.textContent += '#detailDialog .dt-tl-ln .dt-tl-node { width: 8px; height: 8px; left: -17px; top: 3px; background: #8f959e; border-radius: 50%; }\n';
+            s.textContent += '#detailDialog .dt-tl-ly .dt-tl-node { width: 6px; height: 6px; left: -16px; top: 4px; background: #c2c7ce; border-radius: 50%; }\n';
+            s.textContent += '#detailDialog .dt-tl-title      { font-size: 12px; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 3px; color: #1f2329; line-height: 1.5; }\n';
+            s.textContent += '#detailDialog .dt-tl-content    { font-size: 13px; line-height: 1.7; color: #42474e; white-space: pre-wrap; word-break: break-word; padding-left: 0; }\n';
+            s.textContent += '#detailDialog .dt-tl-ln         { margin-left: 16px; padding-left: 14px; border-left: 1px solid #e0e1e5; }\n';
+            s.textContent += '#detailDialog .dt-tl-ly         { margin-left: 32px; padding-left: 14px; border-left: 1px dashed #e0e1e5; }\n';
             s.textContent += '#detailDialog .dt-tl-dy         { margin-left: 0; }\n';
 
-            s.textContent += '.dt-note-dialog-overlay          { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 10001; display: flex; justify-content: center; align-items: center; padding: 20px; }\n';
-            s.textContent += '.dt-note-dialog                   { background: #fff; border: 1px solid #000; width: 560px; max-width: 100%; padding: 16px 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }\n';
-            s.textContent += '.dt-note-dialog-title             { font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #000; }\n';
-            s.textContent += '.dt-note-dialog-ta                { width: 100%; box-sizing: border-box; border: 1px solid #000; padding: 10px; font-size: 13px; line-height: 1.7; resize: vertical; min-height: 180px; font-family: inherit; outline: none; background: #fff; }\n';
-            s.textContent += '.dt-note-dialog-ta:focus          { border: 2px solid #000; padding: 9px; }\n';
+            s.textContent += '.dt-note-dialog-overlay          { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(31,35,41,0.4); z-index: 10001; display: flex; justify-content: center; align-items: center; padding: 20px; }\n';
+            s.textContent += '.dt-note-dialog                   { background: #fff; border: 1px solid #e8e8ec; border-radius: 14px; width: 560px; max-width: 100%; padding: 18px 20px; box-shadow: 0 12px 48px rgba(31,35,41,0.2); }\n';
+            s.textContent += '.dt-note-dialog-title             { font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f2f4; }\n';
+            s.textContent += '.dt-note-dialog-ta                { width: 100%; box-sizing: border-box; border: 1px solid #d8d8dc; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.7; resize: vertical; min-height: 180px; font-family: inherit; outline: none; background: #fff; transition: border-color .15s, box-shadow .15s; }\n';
+            s.textContent += '.dt-note-dialog-ta:focus          { border-color: #1a1a1a; box-shadow: 0 0 0 3px rgba(26,26,26,0.08); }\n';
             s.textContent += '.dt-note-dialog-btns              { margin-top: 14px; display: flex; justify-content: flex-end; gap: 10px; }\n';
-            s.textContent += '.dt-note-dialog-btn               { border: 1px solid #000; background: #fff; padding: 5px 16px; font-size: 13px; cursor: pointer; font-family: inherit; }\n';
-            s.textContent += '.dt-note-dialog-btn:hover         { background: #f0f0f0; }\n';
+            s.textContent += '.dt-note-dialog-btn               { border: 1px solid #d8d8dc; border-radius: 8px; background: #fff; padding: 6px 18px; font-size: 13px; cursor: pointer; font-family: inherit; color: #1f2329; transition: all .15s; }\n';
+            s.textContent += '.dt-note-dialog-btn:hover         { background: #f2f3f5; }\n';
             s.textContent += '.dt-note-dialog-btn:disabled      { opacity: .5; cursor: not-allowed; }\n';
             s.textContent += '.dt-note-dialog-btn:disabled:hover{ background: #fff; }\n';
-            s.textContent += '.dt-note-dialog-ok                { background: #000; color: #fff; }\n';
-            s.textContent += '.dt-note-dialog-ok:hover          { background: #333; }\n';
-            s.textContent += '.dt-note-dialog-ok:disabled:hover { background: #000; }\n';
+            s.textContent += '.dt-note-dialog-ok                { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }\n';
+            s.textContent += '.dt-note-dialog-ok:hover          { background: #333; border-color: #333; }\n';
+            s.textContent += '.dt-note-dialog-ok:disabled:hover { background: #1a1a1a; }\n';
 
-            s.textContent += '#detailDialog .dt-tab-bar { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid #000; }\n';
-            s.textContent += '#detailDialog .dt-tab { padding:8px 28px; font-size:14px; cursor:pointer; border:1px solid #000; border-bottom:none; background:#fff; color:#000; user-select:none; letter-spacing:1px; }\n';
-            s.textContent += '#detailDialog .dt-tab.dt-tab-active { background:#000; color:#fff; }\n';
+            s.textContent += '#detailDialog .dt-tab-bar { display:flex; gap:6px; margin-bottom:16px; }\n';
+            s.textContent += '#detailDialog .dt-tab { padding:7px 22px; font-size:13px; cursor:pointer; border:none; background:#f2f3f5; color:#646a73; user-select:none; letter-spacing:1px; border-radius:999px; transition:all .15s; }\n';
+            s.textContent += '#detailDialog .dt-tab:hover { background:#e8eaee; color:#1f2329; }\n';
+            s.textContent += '#detailDialog .dt-tab.dt-tab-active { background:#1a1a1a; color:#fff; }\n';
             s.textContent += '#detailDialog .dt-tab-panel { display:none; }\n';
             s.textContent += '#detailDialog .dt-tab-panel.dt-tab-panel-active { display:block; }\n';
+
+            // 内联样式的动态元素补 hover/focus（内联 style 写不了伪类）
+            s.textContent += '#detailCloseX:hover            { background:#e8eaee; color:#1f2329; }\n';
+            s.textContent += '#detailCloseBtn:hover          { background:#f2f3f5; border-color:#c2c7ce; }\n';
+            s.textContent += '#detailPaipanBtn:hover         { background:#333; border-color:#333; }\n';
+            s.textContent += '#dtSaveNoteBtn:hover           { background:#333; border-color:#333; }\n';
+            s.textContent += '#dtNoteInput:focus             { border-color:#1a1a1a; box-shadow:0 0 0 3px rgba(26,26,26,0.08); }\n';
 
             document.head.appendChild(s);
         })();
@@ -357,38 +383,71 @@
         overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;display:flex;justify-content:center;align-items:flex-start;padding:40px 0;overflow-y:auto;';
 
         var box = document.createElement('div');
-        box.style.cssText = 'background:#fff;border:1px solid #000;padding:20px;width:900px;max-width:94%;';
-        var notesBlockHtml = '<div class="dt-notes-block" id="dtNotesBlock" style="min-height:300px;">' +
-            '<div class="dt-block-title">事件记录（双击基本信息页卡片添加）</div>' +
-            '<div class="dt-notes-box" id="dtNotesBox"></div>' +
-            '</div>';
+        box.style.cssText = 'background:#fff;border:1px solid #e8e8ec;border-radius:16px;box-shadow:0 12px 48px rgba(31,35,41,0.18);padding:22px 24px;width:900px;max-width:94%;';
 
         box.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
-            '<h3 style="margin:0;font-size:16px;font-weight:normal;">案例详情</h3>' +
-            '<button id="detailCloseX" style="border:1px solid #000;background:#fff;cursor:pointer;padding:2px 10px;font-size:13px;font-family:inherit;">×</button>' +
+            '<h3 style="margin:0;font-size:16px;font-weight:bold;letter-spacing:1px;">案例详情</h3>' +
+            '<button id="detailCloseX" style="border:none;background:#f2f3f5;color:#646a73;cursor:pointer;padding:4px 12px;font-size:14px;font-family:inherit;border-radius:8px;transition:all .15s;">×</button>' +
             '</div>' +
             '<div class="dt-tab-bar">' +
             '<div class="dt-tab dt-tab-active" data-tab="basic">基本信息</div>' +
-            '<div class="dt-tab" data-tab="notes">编辑事件</div>' +
+            '<div class="dt-tab" data-tab="notes">事件记录</div>' +
             '</div>' +
             '<div style="max-height:70vh;overflow-y:auto;padding-right:6px;">' +
             '<div class="dt-tab-panel dt-tab-panel-active" id="dtPanelBasic">' +
-            basicHtml + baziBlockHtml + noteHtml +
+            // 内嵌排盘可用时：由排盘卡片给出公历/农历/时辰/司令/胎元/交运 + 四柱，替换掉文字行与手搓四柱
+            basicHtml + noteHtml + (embedSrc ? '<div id="dtBaziEmbed" style="margin-top:12px;"></div>' : (infoLinesHtml + baziBlockHtml)) +
             '</div>' +
             '<div class="dt-tab-panel" id="dtPanelNotes">' +
-            baziBlockHtml + yunshiHtml + oldDataHint +
+            yunshiHtml + oldDataHint +
             '</div>' +
             '</div>' +
-            '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid #ccc;">' +
-            '<button id="detailCloseBtn" style="border:1px solid #000;background:#fff;color:#000;padding:8px 24px;font-size:14px;cursor:pointer;font-family:inherit;">关闭</button>' +
-            '<button id="detailPaipanBtn" style="border:1px solid #000;background:#000;color:#fff;padding:8px 24px;font-size:14px;cursor:pointer;font-family:inherit;">排盘</button>' +
+            '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid #f1f2f4;">' +
+            '<button id="detailCloseBtn" style="border:1px solid #d8d8dc;background:#fff;color:#1f2329;padding:8px 24px;font-size:14px;cursor:pointer;font-family:inherit;border-radius:8px;transition:all .15s;">关闭</button>' +
+            '<button id="detailPaipanBtn" style="border:1px solid #1a1a1a;background:#1a1a1a;color:#fff;padding:8px 24px;font-size:14px;cursor:pointer;font-family:inherit;border-radius:8px;transition:background .15s;">排盘</button>' +
             '</div>';
 
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
-        function close() { overlay.remove(); }
+        // ===== 内嵌排盘 iframe 挂载 + 高度自适应 =====
+        // bazi.js 在 embed 模式下上报 baziHeightEmbed，与 index.html 中 #baZiArea 的
+        // baziHeight 消息互相隔离；关闭弹窗时移除监听，避免多次打开后重复触发
+        var onBzHeight = null;
+        var onBzMsg = null;
+        if (embedSrc) {
+            var embedHost = document.getElementById('dtBaziEmbed');
+            if (embedHost) {
+                var bzFrame = document.createElement('iframe');
+                bzFrame.id = 'dtBaziFrame';
+                bzFrame.title = '八字排盘';
+                bzFrame.src = embedSrc;
+                bzFrame.style.cssText = 'width:100%;border:none;display:block;background:#fff;min-height:260px;';
+                embedHost.appendChild(bzFrame);
+
+                onBzHeight = function (e) {
+                    var d = e.data;
+                    if (!d || d.type !== 'baziHeightEmbed' || !d.height) return;
+                    var f = document.getElementById('dtBaziFrame');
+                    if (!f) { window.removeEventListener('message', onBzHeight); return; }
+                    var h = Math.ceil(d.height) + 4;
+                    if (Math.abs(f.getBoundingClientRect().height - h) > 2) f.style.height = h + 'px';
+                };
+                window.addEventListener('message', onBzHeight);
+            }
+        }
+
+        function close() {
+            if (onBzHeight) window.removeEventListener('message', onBzHeight);
+            if (onBzMsg) window.removeEventListener('message', onBzMsg);
+            overlay.remove();
+        }
+
+        // 【基本信息页内嵌排盘：双击大运/流年/流月记录事件】
+        // 监听与处理逻辑必须放在下方 hasFullData 块内——
+        // saveNotesToGitee 是块内的 async function 声明，不会提升到函数作用域（V8 行为），
+        // 放在这里调用会直接 ReferenceError。详见"事件记录系统"段落末尾。
 
         document.getElementById('detailCloseX').addEventListener('click', close);
         document.getElementById('detailCloseBtn').addEventListener('click', close);
@@ -570,75 +629,10 @@
             if (e.target === overlay) close();
         });
 
-        // ========== 大运/流年/流月 联动 ==========
+        // ========== 事件记录系统（「事件记录」Tab = 全量时间线步骤器） ==========
         if (hasFullData) {
-            var currentLiuNians = null;
-
-            var liuNianArea = document.getElementById('dtLiuNianArea');
-
-            function renderLiuNianByPhase(phaseKey) {
-                var liunians = Array.isArray(currentLiuNians) ? currentLiuNians : [];
-
-                var titleEl = document.getElementById('dtLiuNianTitle');
-                if (titleEl) titleEl.textContent = currentPhaseTitle || '流年';
-
-                if (liunians.length === 0) {
-                    liuNianArea.innerHTML = '<div class="dt-empty-tip">该阶段暂无流年数据</div>';
-                    var liuYueArea = document.getElementById('dtLiuYueArea');
-                    if (liuYueArea) liuYueArea.innerHTML = '';
-                    var yueTitle = document.getElementById('dtLiuYueTitle');
-                    if (yueTitle) yueTitle.textContent = '流月';
-                    return;
-                }
-
-                var cards = '';
-                currentLiuNians.forEach(function (ln, i) {
-                    cards +=
-                        '<div class="dt-liunian-card" data-liunian-index="' + i + '">' +
-                        '<div class="dt-year-line">' + ln.year + '</div>' +
-                        '<div class="dt-sub-line">' + (ln.nianling || '-') + '岁</div>' +
-                        '<div class="dt-ganzhi-line">' + (ln.yearGanZhi || '-') + '</div>' +
-                        '</div>';
-                });
-                liuNianArea.innerHTML = '<div class="dt-liunian-grid" id="dtLiuNianGrid">' + cards + '</div>';
-                bindLiuNianEvents();
-            }
-
-            function renderLiuYueByIndex(lnIdx) {
-                var liuYueArea = document.getElementById('dtLiuYueArea');
-                if (!liuYueArea || !currentLiuNians || !currentLiuNians[lnIdx]) return;
-                var ln = currentLiuNians[lnIdx];
-                var months = ln.months || [];
-
-                var yueTitle = document.getElementById('dtLiuYueTitle');
-                if (yueTitle) yueTitle.textContent = (ln.yearGanZhi ? ln.yearGanZhi + ' · ' : '') + '流月';
-
-                if (months.length === 0) {
-                    liuYueArea.innerHTML = '<div class="dt-empty-tip">该流年暂无流月分段</div>';
-                    return;
-                }
-                var cards = '';
-                months.forEach(function (m, i) {
-                    var md = m.solarDate;
-                    var mmdd = md ? (md.month + '/' + md.day) : '-';
-                    cards +=
-                        '<div class="dt-liuyue-card" data-liuyue-index="' + i + '">' +
-                        '<div class="dt-jieqi-line">' + (m.JieQi || '-') + '</div>' +
-                        '<div class="dt-date-line">' + mmdd + '</div>' +
-                        '<div class="dt-ganzhi-line">' + (m.ganZhi || '-') + '</div>' +
-                        '</div>';
-                });
-                liuYueArea.innerHTML = '<div class="dt-liuyue-grid">' + cards + '</div>';
-            }
-
-            // ========== 事件记录系统 ==========
             var _storedNotes = (record && record.notes && typeof record.notes === 'object') ? record.notes : null;
             var notes = _storedNotes ? JSON.parse(JSON.stringify(_storedNotes)) : {};
-            var currentDayunKey = null;
-            var currentLiuNianIdx = null;
-            var currentLiuYueIdx = null;
-            var currentPhaseLiunians = [];
-            var currentPhaseTitle = '流年';
 
             async function saveNotesToGitee(record, notes, key, prevValue) {
                 var records = global.RecordCache.getRecords();
@@ -742,102 +736,141 @@
                 });
             }
 
+            // 事件记录区：全量时间线（大运→流年→流月），
+            // 一次性展示全部事件的时间线（大运 → 流年 → 流月 三层），不再只显示当前选中的大运。
+            // 双击上方卡片编辑的逻辑不变；本区只承担「查看全部内容」。
+            var _dtMetaCache = {};
+            function liuniansOfDayun(dk) {
+                if (_dtMetaCache[dk]) return _dtMetaCache[dk];
+                var list = null;
+                try {
+                    var _dt = dtDateZhuanhuan(record.solar);
+                    if (dk === 'pre') {
+                        list = global.BaZiCalc.getYearRange(_dt, _dtGender);
+                    } else {
+                        var di = Number(dk) - 1;
+                        if (di >= 0 && di <= 11) list = global.BaZiCalc.generateLunarMonths(_dt, _dtGender, di);
+                    }
+                } catch (e) { list = null; }
+                if (!Array.isArray(list)) list = [];
+                _dtMetaCache[dk] = list;
+                return list;
+            }
+            function dyMetaOf(dk) {
+                var meta = { year: '', ganzhi: '', age: '' };
+                if (dk === 'pre') {
+                    meta.year = (typeof prePhase !== 'undefined' && prePhase) ? (prePhase.labelYear || '') : '';
+                    meta.ganzhi = '小运';
+                    meta.age = (typeof prePhase !== 'undefined' && prePhase) ? (prePhase.labelAge || '') : '';
+                } else if (allPhase) {
+                    for (var i = 0; i < allPhase.length; i++) {
+                        if (String(allPhase[i].phaseKey) === String(dk)) {
+                            meta.year = allPhase[i].starYear || '';
+                            meta.ganzhi = allPhase[i].dayunganzhi || '';
+                            meta.age = allPhase[i].startAge != null ? allPhase[i].startAge : '';
+                            break;
+                        }
+                    }
+                }
+                return meta;
+            }
+            function lnMetaOf(dk, lnIdx, fb) {
+                var meta = { year: fb.year || '', ganzhi: fb.ganzhi || '', age: fb.age != null ? fb.age : '' };
+                var ln = liuniansOfDayun(dk)[Number(lnIdx)];
+                if (ln) {
+                    if (!meta.year) meta.year = ln.year || '';
+                    if (!meta.ganzhi) meta.ganzhi = ln.yearGanZhi || '';
+                    if (meta.age === '' || meta.age == null) meta.age = ln.nianling != null ? ln.nianling : '';
+                }
+                return meta;
+            }
+
             function renderNotes() {
                 var box = document.getElementById('dtNotesBox');
                 if (!box) return;
-                if (currentDayunKey == null) {
-                    box.innerHTML = '<div class="dt-empty-tip">请从上方选择一个大运</div>';
+
+                // 1) 按 key 分组：dayun:<dk> / liunian:<dk>:<ln> / liuyue:<dk>:<ln>:<ly>
+                var groups = {};
+                Object.keys(notes).forEach(function (k) {
+                    if (!noteText(notes[k])) return;
+                    var p = k.split(':');
+                    if (p[0] === 'dayun') {
+                        if (!groups[p[1]]) groups[p[1]] = { dayunNote: null, liunians: {} };
+                        groups[p[1]].dayunNote = notes[k];
+                    } else if (p[0] === 'liunian') {
+                        if (!groups[p[1]]) groups[p[1]] = { dayunNote: null, liunians: {} };
+                        if (!groups[p[1]].liunians[p[2]]) groups[p[1]].liunians[p[2]] = { note: null, liuyues: {} };
+                        groups[p[1]].liunians[p[2]].note = notes[k];
+                    } else if (p[0] === 'liuyue') {
+                        if (!groups[p[1]]) groups[p[1]] = { dayunNote: null, liunians: {} };
+                        if (!groups[p[1]].liunians[p[2]]) groups[p[1]].liunians[p[2]] = { note: null, liuyues: {} };
+                        groups[p[1]].liunians[p[2]].liuyues[p[3]] = notes[k];
+                    }
+                });
+
+                var dkKeys = Object.keys(groups).sort(function (a, b) {
+                    if (a === 'pre') return -1;
+                    if (b === 'pre') return 1;
+                    return Number(a) - Number(b);
+                });
+
+                if (dkKeys.length === 0) {
+                    box.innerHTML = '<div class="dt-empty-tip">暂无事件记录，在「基本信息」页的排盘上双击大运 / 流年 / 流月添加</div>';
                     return;
                 }
-                var phase = null;
-                if (allPhase) {
-                    for (var i = 0; i < allPhase.length; i++) {
-                        if (String(allPhase[i].phaseKey) === String(currentDayunKey)) { phase = allPhase[i]; break; }
-                    }
-                }
-                var dayunTitle = phase && phase.title ? phase.title : ('大运 · ' + currentDayunKey);
+
+                // 2) 时间线 HTML（步骤器样式，纯查看）
                 var html = '<div class="dt-timeline">';
+                dkKeys.forEach(function (dk) {
+                    var g = groups[dk];
+                    var dm = dyMetaOf(dk);
+                    var dyMeta = noteMeta(g.dayunNote);
+                    if (dyMeta.year) dm.year = dyMeta.year;
+                    if (dyMeta.ganzhi) dm.ganzhi = dyMeta.ganzhi;
+                    if (dyMeta.age !== '' && dyMeta.age != null) dm.age = dyMeta.age;
 
-                var dk = 'dayun:' + currentDayunKey;
-                var dyMeta = noteMeta(notes[dk]);
-                var dyTitleParts = ['【大运】'];
-                // 基于大运卡片本身的数据补齐，然后用保存的元数据优先覆盖
-                var dyYear = '', dyGz = '', dyAge = '';
-                if (currentDayunKey === 'pre') {
-                    if (typeof prePhase !== 'undefined' && prePhase) {
-                        dyYear = prePhase.labelYear || '';
-                        dyGz = '小运';
-                        dyAge = prePhase.labelAge || '';
-                    }
-                } else if (phase) {
-                    dyYear = phase.starYear || '';
-                    dyGz = phase.dayunganzhi || '';
-                    dyAge = phase.startAge != null ? phase.startAge : '';
-                }
-                if (dyMeta.year) dyYear = dyMeta.year;
-                if (dyMeta.ganzhi) dyGz = dyMeta.ganzhi;
-                if (dyMeta.age !== '' && dyMeta.age != null) dyAge = dyMeta.age;
-                if (dyYear) dyTitleParts.push(dyYear);
-                if (dyGz) dyTitleParts.push(dyGz);
-                if (dyAge !== '' && dyAge != null) dyTitleParts.push(dyAge + '岁');
+                    var dParts = ['【大运】'];
+                    if (dm.year) dParts.push(dm.year);
+                    if (dm.ganzhi) dParts.push(dm.ganzhi);
+                    if (dm.age !== '' && dm.age != null) dParts.push(dm.age + '岁');
 
-                var lnGroups = [];
-                if (currentPhaseLiunians && currentPhaseLiunians.length) {
-                    for (var li2 = 0; li2 < currentPhaseLiunians.length; li2++) {
-                        var ln2 = currentPhaseLiunians[li2];
-                        var lnk2 = 'liunian:' + currentDayunKey + ':' + li2;
-                        var lnHasText2 = !!noteText(notes[lnk2]);
-                        var lyItems2 = [];
-                        if (ln2.months && ln2.months.length) {
-                            for (var mj2 = 0; mj2 < ln2.months.length; mj2++) {
-                                var ly2 = ln2.months[mj2];
-                                var lyk2 = 'liuyue:' + currentDayunKey + ':' + li2 + ':' + mj2;
-                                if (noteText(notes[lyk2])) {
-                                    var lyMeta2 = noteMeta(notes[lyk2]);
-                                    var md2 = ly2.solarDate;
-                                    var yueStr = (md2 && md2.month != null && md2.day != null)
-                                        ? (md2.month + '/' + md2.day)
-                                        : ('第' + (mj2 + 1));
-                                    var lyParts2 = ['【流月】', yueStr];
-                                    if (lyMeta2.ganzhi) lyParts2.push(lyMeta2.ganzhi);
-                                    lyItems2.push({ title: lyParts2.join(' '), text: noteText(notes[lyk2]) });
-                                }
-                            }
-                        }
-                        if (lnHasText2 || lyItems2.length > 0) {
-                            lnGroups.push({ ln: ln2, lnIdx: li2, lnItem: ln2, lyItems: lyItems2 });
-                        }
-                    }
-                }
-
-                var dyHasText = !!noteText(notes[dk]);
-                if (dyHasText || lnGroups.length > 0) {
                     html += '<div class="dt-tl-item dt-tl-dy">';
                     html += '<div class="dt-tl-node"></div>';
-                    html += '<div class="dt-tl-title">' + dyTitleParts.join(' ') + '</div>';
-                    if (dyHasText) {
-                        html += '<div class="dt-tl-content">' + escAndBreak(noteText(notes[dk])) + '</div>';
+                    html += '<div class="dt-tl-title">' + escAndBreak(dParts.join(' ')) + '</div>';
+                    if (noteText(g.dayunNote)) {
+                        html += '<div class="dt-tl-content">' + escAndBreak(noteText(g.dayunNote)) + '</div>';
                     }
 
-                    lnGroups.forEach(function (g) {
-                        var lnMeta = noteMeta(notes['liunian:' + currentDayunKey + ':' + g.lnIdx]);
-                        var lnYear = lnMeta.year || (g.ln.year || '');
-                        var lnGz = lnMeta.ganzhi || (g.ln.yearGanZhi || '');
-                        var lnAge = (lnMeta.age !== '' && lnMeta.age != null) ? lnMeta.age : (g.ln.nianling != null ? g.ln.nianling : '');
-                        var lnTitle = '【流年】' + lnYear + ' ' + lnGz + (lnAge !== '' ? ' · ' + lnAge + '岁' : '');
+                    var lnKeys = Object.keys(g.liunians).sort(function (a, b) { return Number(a) - Number(b); });
+                    lnKeys.forEach(function (lnIdx) {
+                        var lnG = g.liunians[lnIdx];
+                        var lm = lnMetaOf(dk, lnIdx, noteMeta(lnG.note));
+                        var lnMain = '';
+                        if (lm.year) lnMain += lm.year;
+                        if (lm.ganzhi) lnMain += (lnMain ? ' ' : '') + lm.ganzhi;
+                        var lnAgeStr = (lm.age !== '' && lm.age != null) ? (' · ' + lm.age + '岁') : '';
 
                         html += '<div class="dt-tl-item dt-tl-ln">';
                         html += '<div class="dt-tl-node"></div>';
-                        html += '<div class="dt-tl-title">' + lnTitle + '</div>';
-                        if (noteText(notes['liunian:' + currentDayunKey + ':' + g.lnIdx])) {
-                            html += '<div class="dt-tl-content">' + escAndBreak(noteText(notes['liunian:' + currentDayunKey + ':' + g.lnIdx])) + '</div>';
+                        html += '<div class="dt-tl-title">' + escAndBreak('【流年】' + lnMain + lnAgeStr) + '</div>';
+                        if (noteText(lnG.note)) {
+                            html += '<div class="dt-tl-content">' + escAndBreak(noteText(lnG.note)) + '</div>';
                         }
 
-                        g.lyItems.forEach(function (ly) {
+                        var lyKeys = Object.keys(lnG.liuyues).sort(function (a, b) { return Number(a) - Number(b); });
+                        lyKeys.forEach(function (lyIdx) {
+                            var lyNote = lnG.liuyues[lyIdx];
+                            var lym = noteMeta(lyNote);
+                            var lyLn = liuniansOfDayun(dk)[Number(lnIdx)];
+                            var md = lym.md || ((lyLn && lyLn.solarDate && lyLn.solarDate.month != null) ? (lyLn.solarDate.month + '/' + lyLn.solarDate.day) : '');
+                            var yueStr = md || ('第' + (Number(lyIdx) + 1));
+                            var lyParts = ['【流月】', yueStr];
+                            if (lym.ganzhi) lyParts.push(lym.ganzhi);
+
                             html += '<div class="dt-tl-item dt-tl-ly">';
                             html += '<div class="dt-tl-node"></div>';
-                            html += '<div class="dt-tl-title">' + ly.title + '</div>';
-                            html += '<div class="dt-tl-content">' + escAndBreak(ly.text) + '</div>';
+                            html += '<div class="dt-tl-title">' + escAndBreak(lyParts.join(' ')) + '</div>';
+                            html += '<div class="dt-tl-content">' + escAndBreak(noteText(lyNote)) + '</div>';
                             html += '</div>';
                         });
 
@@ -845,285 +878,67 @@
                     });
 
                     html += '</div>';
-                }
-
+                });
                 html += '</div>';
 
-                if (!dyHasText && lnGroups.length === 0) {
-                    html = '<div class="dt-empty-tip">双击上方任一卡片（大运 / 流年 / 流月），记录【' + dayunTitle + '】期间发生的事</div>';
-                }
                 box.innerHTML = html;
             }
 
-            // ========== 大运事件绑定 ==========
-            var dtGrid = document.getElementById('dtDayunGrid');
-            var liuYueAreaRoot = document.getElementById('dtLiuYueArea');
-
-            function clearSelectedDayun() {
-                if (!dtGrid) return;
-                dtGrid.querySelectorAll('.dt-dayun-card').forEach(function (c) { c.classList.remove('dt-current'); });
+            // ===== 基本信息页内嵌排盘：双击大运/流年/流月 → 记录事件 =====
+            // 子页（bazi.html?embed=1）双击时发来 baziNoteEdit；这里复用「编辑事件」页的
+            // notes 数据与云端保存逻辑，保存后把最新标记回传，子页给对应格子打点。
+            // ⚠ 本段必须留在 hasFullData 块内：saveNotesToGitee 是块内的 async function 声明，
+            //   V8 下不会提升到函数作用域，放到外层调用会直接 ReferenceError。
+            function pushNoteMarksToEmbed() {
+                var f = document.getElementById('dtBaziFrame');
+                if (!f || !f.contentWindow) return;
+                var marks = {};
+                // 回传完整 note 对象（{text,year,ganzhi,age,md?}，旧数据可能是纯文本），
+                // 子页据此在选中条目下方内联显示事件内容；仅做真值判断的旧逻辑不受影响
+                Object.keys(notes).forEach(function (k) { if (noteText(notes[k])) marks[k] = notes[k]; });
+                try { f.contentWindow.postMessage({ type: 'baziNotesMark', marks: marks }, '*'); } catch (e) { }
             }
-            function selectDayunByKey(key) {
-                if (!dtGrid) return;
-                clearSelectedDayun();
-                var el = dtGrid.querySelector('.dt-dayun-card[data-dayun-index="' + key + '"]');
-                if (el) el.classList.add('dt-current');
-            }
 
-            if (dtGrid) {
-                dtGrid.addEventListener('click', function (e) {
-                    var card = e.target.closest('.dt-dayun-card');
-                    if (!card || card.classList.contains('dt-empty')) return;
-                    if (card.classList.contains('dt-current')) return;
-                    var key = card.dataset.dayunIndex;
-                    selectDayunByKey(key);
-                    currentDayunKey = key;
-                    currentLiuNianIdx = null;
-                    currentLiuYueIdx = null;
-                    var phase = null;
-                    if (key == "pre") {
-                        phase = (typeof prePhase !== 'undefined') ? prePhase : null;
-                    } else if (allPhase) {
-                        for (var pi = 0; pi < allPhase.length; pi++) {
-                            if (String(allPhase[pi].phaseKey) === String(key)) { phase = allPhase[pi]; break; }
-                        }
+            function openNoteEditFromEmbed(d) {
+                var key = String(d.key);
+                var meta = (d.meta && typeof d.meta === 'object') ? d.meta : {};
+                showNoteDialog(d.title || '记录事件', noteText(notes[key]), async function (newText) {
+                    var prev = notes[key] || '';
+                    if (!newText) {
+                        delete notes[key];
+                    } else {
+                        var item = {
+                            text: newText,
+                            year: meta.year || '',
+                            ganzhi: meta.ganzhi || '',
+                            age: (meta.age != null && meta.age !== '') ? meta.age : ''
+                        };
+                        if (meta.md) item.md = meta.md;
+                        notes[key] = item;
                     }
-                    let filered = null;
-                    try {
-                        var _dt = dtDateZhuanhuan(record.solar);
-                        var dayunIdxForCalc = (key == "pre") ? null : (Number(key) - 1);
-                        if (key == "pre") {
-                            filered = global.BaZiCalc.getYearRange(_dt, _dtGender);
-                        } else if (dayunIdxForCalc >= 0 && dayunIdxForCalc <= 11) {
-                            filered = global.BaZiCalc.generateLunarMonths(_dt, _dtGender, dayunIdxForCalc);
-                        } else {
-                            filered = [];
-                        }
-                    } catch (e) {
-                        console.warn('[案例详情] BaZiCalc 流年生成失败 key=' + key + '：', e);
-                        filered = null;
-                    }
-                    if (!Array.isArray(filered)) filered = [];
-
-                    if (phase) {
-                        try { phase.liunians = filered; } catch (e) { }
-                        if (!phase.title) {
-                            try { phase.title = (key === 'pre') ? '起运前流年' : ((phase.phaseName || phase.dayunganzhi || '大运') + '·流年'); } catch (e) { }
-                        }
-                    }
-                    currentPhaseLiunians = filered;
-                    currentLiuNians = filered;
-                    currentPhaseTitle = (key === 'pre') ? '起运前流年' : ((phase && (phase.phaseName || phase.dayunganzhi)) ? ((phase.phaseName || phase.dayunganzhi) + '·流年') : '流年');
                     renderNotes();
-
-                    renderLiuNianByPhase(key);
-                    var firstLn = document.querySelector('#dtLiuNianGrid .dt-liunian-card[data-liunian-index="0"]');
-                    if (firstLn) firstLn.classList.add('dt-current');
-                    currentLiuNianIdx = 0;
-                    currentLiuYueIdx = null;
-                    renderNotes();
-                    renderLiuYueByIndex(0);
-                });
-
-                dtGrid.addEventListener('dblclick', function (e) {
-                    var card = e.target.closest('.dt-dayun-card');
-                    if (!card || card.classList.contains('dt-empty')) return;
-                    var key = card.dataset.dayunIndex;
-                    var phase = null;
-                    if (allPhase) {
-                        for (var pi = 0; pi < allPhase.length; pi++) {
-                            if (String(allPhase[pi].phaseKey) === String(key)) { phase = allPhase[pi]; break; }
-                        }
-                    }
-                    var dlgTitle = '记录【大运】' + (phase && phase.title ? phase.title : key) + ' 发生的事';
-                    var k = 'dayun:' + key;
-                    var initText = noteText(notes[k]);
-                    var dyYear = (key === 'pre') ? (typeof prePhase !== 'undefined' ? prePhase.labelYear : '') : (phase ? phase.starYear : '');
-                    var dyGz = (key === 'pre') ? '小运' : (phase ? phase.dayunganzhi : '');
-                    var dyAge = (key === 'pre') ? (typeof prePhase !== 'undefined' ? prePhase.labelAge : '') : (phase ? phase.startAge : '');
-                    showNoteDialog(dlgTitle, initText, async function (newText) {
-                        var prev = notes[k] || '';
-                        if (!newText) delete notes[k];
-                        else notes[k] = { text: newText, year: dyYear, ganzhi: dyGz, age: dyAge };
-                        renderNotes();
-                        return await saveNotesToGitee(record, notes, k, prev);
-                    });
-                });
-                dtGrid.addEventListener('mouseover', function (e) {
-                    var card = e.target.closest('.dt-dayun-card');
-                    if (!card || card.classList.contains('dt-empty')) return;
-                    card.classList.add('dt-hover');
-                });
-                dtGrid.addEventListener('mouseout', function (e) {
-                    var card = e.target.closest('.dt-dayun-card');
-                    if (!card || card.classList.contains('dt-empty')) return;
-                    card.classList.remove('dt-hover');
+                    var ok = await saveNotesToGitee(record, notes, key, prev);
+                    pushNoteMarksToEmbed();
+                    return ok;
                 });
             }
 
-            // ========== 流年事件绑定 ==========
-            function bindLiuNianEvents() {
-                var lnGrid = document.getElementById('dtLiuNianGrid');
-                if (!lnGrid) return;
+            onBzMsg = function (e) {
+                var d = e.data;
+                if (!d || typeof d !== 'object') return;
+                if (d.type === 'baziNotesWant') { pushNoteMarksToEmbed(); return; }
+                if (d.type === 'baziNoteEdit' && d.key) openNoteEditFromEmbed(d);
+            };
 
-                function clearSel() { lnGrid.querySelectorAll('.dt-liunian-card').forEach(function (c) { c.classList.remove('dt-current'); }); }
-                function selByIdx(idx) {
-                    clearSel();
-                    var el = lnGrid.querySelector('.dt-liunian-card[data-liunian-index="' + idx + '"]');
-                    if (el) el.classList.add('dt-current');
-                }
-
-                lnGrid.addEventListener('click', function (e) {
-                    var card = e.target.closest('.dt-liunian-card');
-                    if (!card) return;
-                    if (card.classList.contains('dt-current')) return;
-                    var idx = card.dataset.liunianIndex;
-                    selByIdx(idx);
-                    var intIdx = parseInt(idx, 10);
-                    currentLiuNianIdx = intIdx;
-                    currentLiuYueIdx = null;
-                    renderNotes();
-
-                    renderLiuYueByIndex(intIdx);
-                    if (liuYueAreaRoot) liuYueAreaRoot.querySelectorAll('.dt-liuyue-card').forEach(function (c) { c.classList.remove('dt-current'); });
-                });
-                lnGrid.addEventListener('dblclick', function (e) {
-                    var card = e.target.closest('.dt-liunian-card');
-                    if (!card) return;
-                    var idx = card.dataset.liunianIndex;
-                    var intIdx = parseInt(idx, 10);
-                    var ln = (currentPhaseLiunians && currentPhaseLiunians[intIdx]) ? currentPhaseLiunians[intIdx] : null;
-                    var phaseTitle = '大运';
-                    if (allPhase && currentDayunKey != null) {
-                        for (var pi = 0; pi < allPhase.length; pi++) {
-                            if (String(allPhase[pi].phaseKey) === String(currentDayunKey)) {
-                                phaseTitle = allPhase[pi].title || phaseTitle;
-                                break;
-                            }
-                        }
-                    }
-                    var lnSubTitle = ln
-                        ? (ln.year + ' ' + (ln.yearGanZhi || '') + ' · ' + (ln.nianling != null ? ln.nianling + '岁' : ''))
-                        : ('第 ' + intIdx + ' 个流年');
-                    var dlgTitle = '记录【' + phaseTitle + ' / 流年】' + lnSubTitle + ' 发生的事';
-                    var k = 'liunian:' + currentDayunKey + ':' + intIdx;
-                    var initText = noteText(notes[k]);
-                    var lnYear = ln ? ln.year : '';
-                    var lnGz = ln ? ln.yearGanZhi : '';
-                    var lnAge = ln ? ln.nianling : '';
-                    showNoteDialog(dlgTitle, initText, async function (newText) {
-                        var prev = notes[k] || '';
-                        if (!newText) delete notes[k];
-                        else notes[k] = { text: newText, year: lnYear, ganzhi: lnGz, age: lnAge };
-                        renderNotes();
-                        return await saveNotesToGitee(record, notes, k, prev);
-                    });
-                });
-                lnGrid.addEventListener('mouseover', function (e) {
-                    var card = e.target.closest('.dt-liunian-card');
-                    if (!card) return;
-                    card.classList.add('dt-hover');
-                });
-                lnGrid.addEventListener('mouseout', function (e) {
-                    var card = e.target.closest('.dt-liunian-card');
-                    if (!card) return;
-                    card.classList.remove('dt-hover');
-                });
+            var _bzFrameEl = document.getElementById('dtBaziFrame');
+            if (_bzFrameEl) {
+                window.addEventListener('message', onBzMsg);
+                // 子页加载完成后主动推一次标记（子页 init 后也会索要一次，双保险）
+                _bzFrameEl.addEventListener('load', function () { setTimeout(pushNoteMarksToEmbed, 60); });
             }
 
-            // ========== 流月事件绑定 ==========
-            if (liuYueAreaRoot) {
-                liuYueAreaRoot.addEventListener('click', function (e) {
-                    var card = e.target.closest('.dt-liuyue-card');
-                    if (!card) return;
-                    if (card.classList.contains('dt-current')) return;
-                    liuYueAreaRoot.querySelectorAll('.dt-liuyue-card').forEach(function (c) { c.classList.remove('dt-current'); });
-                    card.classList.add('dt-current');
-                    currentLiuYueIdx = parseInt(card.dataset.liuyueIndex, 10);
-                    renderNotes();
-                });
-                liuYueAreaRoot.addEventListener('dblclick', function (e) {
-                    var card = e.target.closest('.dt-liuyue-card');
-                    if (!card) return;
-                    var lyIdx = parseInt(card.dataset.liuyueIndex, 10);
-                    if (isNaN(lyIdx)) return;
-                    var ln = (currentPhaseLiunians && currentLiuNianIdx != null) ? currentPhaseLiunians[currentLiuNianIdx] : null;
-                    var ly = (ln && ln.months && ln.months[lyIdx]) ? ln.months[lyIdx] : null;
-                    var phaseTitle = '大运';
-                    if (allPhase && currentDayunKey != null) {
-                        for (var pi = 0; pi < allPhase.length; pi++) {
-                            if (String(allPhase[pi].phaseKey) === String(currentDayunKey)) {
-                                phaseTitle = allPhase[pi].title || phaseTitle;
-                                break;
-                            }
-                        }
-                    }
-                    var lnSubTitle = ln
-                        ? (ln.year + ' ' + (ln.yearGanZhi || '') + ' · ' + (ln.nianling != null ? ln.nianling + '岁' : ''))
-                        : '流年';
-                    var md = (ly && ly.solarDate) ? ly.solarDate : null;
-                    var mmdd = md ? (md.month + '/' + md.day) : '-';
-                    var lySubTitle = ly
-                        ? ((ly.JieQi || '-') + ' ' + (ly.ganZhi || '') + ' · ' + mmdd)
-                        : ('第 ' + lyIdx + ' 月');
-                    var dlgTitle = '记录【' + phaseTitle + ' / ' + lnSubTitle + ' · 流月】' + lySubTitle + ' 发生的事';
-                    var k = 'liuyue:' + currentDayunKey + ':' + currentLiuNianIdx + ':' + lyIdx;
-                    var initText = noteText(notes[k]);
-                    var lyGz = ly ? ly.ganZhi : '';
-                    var lyYear = ln ? ln.year : '';
-                    var lyAge = ln ? ln.nianling : '';
-                    var lyMd = mmdd || '';
-                    showNoteDialog(dlgTitle, initText, async function (newText) {
-                        var prev = notes[k] || '';
-                        if (!newText) delete notes[k];
-                        else notes[k] = { text: newText, year: lyYear, ganzhi: lyGz, age: lyAge, md: lyMd };
-                        renderNotes();
-                        return await saveNotesToGitee(record, notes, k, prev);
-                    });
-                });
-                liuYueAreaRoot.addEventListener('mouseover', function (e) {
-                    var card = e.target.closest('.dt-liuyue-card');
-                    if (!card) return;
-                    card.classList.add('dt-hover');
-                });
-                liuYueAreaRoot.addEventListener('mouseout', function (e) {
-                    var card = e.target.closest('.dt-liuyue-card');
-                    if (!card) return;
-                    card.classList.remove('dt-hover');
-                });
-            }
-
-            // ========== 默认选中 ==========
-            if (typeof prePhase !== 'undefined' && prePhase) {
-                var firstPhase = prePhase;
-                var firstKey = 'pre';
-                currentDayunKey = firstKey;
-                currentLiuNianIdx = null;
-                currentLiuYueIdx = null;
-
-                try {
-                    var _dt = dtDateZhuanhuan(record.solar);
-                    var preFiltered = global.BaZiCalc.getYearRange(_dt, _dtGender);
-                    if (Array.isArray(preFiltered)) {
-                        try { firstPhase.liunians = preFiltered; } catch (e) { }
-                        try { if (!firstPhase.title) firstPhase.title = '起运前流年'; } catch (e) { }
-                    }
-                } catch (e) { console.warn('[案例详情] 默认童限流年生成失败：', e); }
-                if (!firstPhase.liunians || !Array.isArray(firstPhase.liunians)) firstPhase.liunians = [];
-                currentPhaseLiunians = firstPhase.liunians;
-                currentLiuNians = firstPhase.liunians;
-                currentPhaseTitle = firstPhase.title || '起运前流年';
-
-                selectDayunByKey(firstKey);
-                renderNotes();
-                renderLiuNianByPhase(firstKey);
-                var firstLn = document.querySelector('#dtLiuNianGrid .dt-liunian-card[data-liunian-index="0"]');
-                if (firstLn) firstLn.classList.add('dt-current');
-                currentLiuNianIdx = 0;
-                currentLiuYueIdx = null;
-                renderNotes();
-                renderLiuYueByIndex(0);
-            }
+            // ========== 初始渲染 ==========
+            renderNotes();
         }
     }
 

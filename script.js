@@ -3,7 +3,7 @@
 
 const LunarCalendar = (function () {
     const CONFIG = {
-        MIN_YEAR: 1885,
+        MIN_YEAR: 1000,
         MAX_YEAR: 2050
     };
 
@@ -11,14 +11,13 @@ const LunarCalendar = (function () {
         yearGrid: null,
         prevYearBtn: null,
         nextYearBtn: null,
-        currentYearText: null,
+        blockRangeText: null,
         ganZhiSpan: null,
         yearInfoDiv: null,
         toggleGridBtn: null
     };
 
     let currentYear = new Date().getFullYear();
-    let currentBaZi = null;
     // 天干五合映射
     const GAN_HE_MAP = {
         '甲': '己', '己': '甲',
@@ -28,109 +27,7 @@ const LunarCalendar = (function () {
         '戊': '癸', '癸': '戊'
     };
 
-    // rysl.json · 十二地支藏干人元司令分日用事
-    // 顺序：寅(立春) → 卯(惊蛰) → 辰(清明) → 巳(立夏) → 午(芒种) → 未(小暑)
-    //       申(立秋) → 酉(白露) → 戌(寒露) → 亥(立冬) → 子(大雪) → 丑(小寒)
-    // 算法：前面各段按固定天数，最后一段吃掉当月剩余所有天数（不论月大月小）
-    const RYSL_DATA = [
-        { 月份: '寅月', 节气: '立春', 分日用事: [{ 天数: 7, 藏干: '戊' }, { 天数: 7, 藏干: '丙' }, { 天数: 16, 藏干: '甲' }] },
-        { 月份: '卯月', 节气: '惊蛰', 分日用事: [{ 天数: 10, 藏干: '甲' }, { 天数: 20, 藏干: '乙' }] },
-        { 月份: '辰月', 节气: '清明', 分日用事: [{ 天数: 9, 藏干: '乙' }, { 天数: 3, 藏干: '癸' }, { 天数: 18, 藏干: '戊' }] },
-        { 月份: '巳月', 节气: '立夏', 分日用事: [{ 天数: 5, 藏干: '戊' }, { 天数: 9, 藏干: '庚' }, { 天数: 16, 藏干: '丙' }] },
-        { 月份: '午月', 节气: '芒种', 分日用事: [{ 天数: 10, 藏干: '丙' }, { 天数: 9, 藏干: '己' }, { 天数: 11, 藏干: '丁' }] },
-        { 月份: '未月', 节气: '小暑', 分日用事: [{ 天数: 9, 藏干: '丁' }, { 天数: 3, 藏干: '乙' }, { 天数: 18, 藏干: '己' }] },
-        { 月份: '申月', 节气: '立秋', 分日用事: [{ 天数: 10, 藏干: '戊' }, { 天数: 3, 藏干: '壬' }, { 天数: 17, 藏干: '庚' }] },
-        { 月份: '酉月', 节气: '白露', 分日用事: [{ 天数: 10, 藏干: '庚' }, { 天数: 20, 藏干: '辛' }] },
-        { 月份: '戌月', 节气: '寒露', 分日用事: [{ 天数: 9, 藏干: '辛' }, { 天数: 3, 藏干: '丁' }, { 天数: 18, 藏干: '戊' }] },
-        { 月份: '亥月', 节气: '立冬', 分日用事: [{ 天数: 7, 藏干: '戊' }, { 天数: 5, 藏干: '甲' }, { 天数: 18, 藏干: '壬' }] },
-        { 月份: '子月', 节气: '大雪', 分日用事: [{ 天数: 10, 藏干: '壬' }, { 天数: 20, 藏干: '癸' }] },
-        { 月份: '丑月', 节气: '小寒', 分日用事: [{ 天数: 9, 藏干: '癸' }, { 天数: 3, 藏干: '辛' }, { 天数: 18, 藏干: '己' }] }
-    ];
-
-    /**
-     * 按 rysl.json 的分日用事天数计算司令分野
-     * 算法：前面各段按固定天数累加，最后一段吃掉当月剩余所有天数
-     * @param {SolarTime} solarTime
-     * @returns {string} 例如 "癸司令（清明第12.3天，距立夏17.8天）"
-     */
-    function getSiLingFromRysl(solarTime) {
-        try {
-            const targetJD = solarTime.getJulianDay();
-            const y = solarTime.getYear();
-
-            const ryslJieNames = RYSL_DATA.map(x => x.节气);
-
-            // 收集 targetYear ±1 年内所有「节」，带 JulianDay 和 RYSL 索引
-            const candidates = [];
-            for (let yy = y - 1; yy <= y + 1; yy++) {
-                for (let i = 0; i < 24; i++) {
-                    try {
-                        const term = SolarTerm.fromIndex(yy, i);
-                        if (!term.isJie()) continue;
-                        const name = term.getName();
-                        const idx = ryslJieNames.indexOf(name);
-                        if (idx === -1) continue;
-                        candidates.push({
-                            term: term,
-                            jd: term.getJulianDay(),
-                            ryslIdx: idx
-                        });
-                    } catch (e) { }
-                }
-            }
-            candidates.sort((a, b) => a.jd - b.jd);
-
-            // 找到 <= targetJD 的最后一个节（当前月令起始）
-            let curIdx = -1;
-            for (let i = 0; i < candidates.length; i++) {
-                if (candidates[i].jd <= targetJD) curIdx = i;
-                else break;
-            }
-            if (curIdx === -1 || curIdx + 1 >= candidates.length) return '—';
-
-            const curJie = candidates[curIdx];
-            const nextJie = candidates[curIdx + 1];
-            const monthData = RYSL_DATA[curJie.ryslIdx];
-
-            // 已过天数（0-based 小数：交节时刻=0天）
-            const elapsedDays = targetJD - curJie.jd;
-            // 距下一节天数
-            const remainDays = nextJie.jd - targetJD;
-
-            const jieName = curJie.term.getName();
-            const nextJieName = nextJie.term.getName();
-
-            // 分段命中：前面各段按固定天数逐段累加，最后一段吃掉当月剩余所有天数
-            // 亥月戊7 + 甲5 + 壬18 → [0,7)戊 / [7,12)甲 / [12,∞)壬
-            const segs = monthData.分日用事;
-            let hit = segs[segs.length - 1];
-            let accEnd = 0;       // 0-based 累加结束点（exclusive）
-            for (let i = 0; i < segs.length; i++) {
-                accEnd += segs[i].天数;
-                if (i === segs.length - 1) {
-                    hit = segs[i];
-                    break;
-                }
-                if (elapsedDays < accEnd) {
-                    hit = segs[i];
-                    break;
-                }
-            }
-
-            // 保留1位小数
-            const fmtDay = (d) => {
-                if (d < 0) d = 0;
-                return Math.round(d * 10) / 10;
-            };
-
-            return `${hit.藏干}司令（${jieName}第${fmtDay(elapsedDays)}天，距${nextJieName}${fmtDay(remainDays)}天）`;
-        } catch (e) {
-            console.error('getSiLingFromRysl error:', e);
-            return '—';
-        }
-    }
-
-    
+    // 司令分野查询已封装到 dayunliunianliuyue.js（BaZiCalc.getSiLingFromRysl / BaZiCalc.RYSL_DATA）
 
     const GanZhiUtil = {
         GANZHI_FLOWER_NAME: {
@@ -247,9 +144,52 @@ const LunarCalendar = (function () {
     }
 
     const YearGrid = {
+        // 当前分块（一甲子）的起始年份
+        blockStart: 0,
+
         init() {
+            // 事件委托：分块重绘后无需重复绑定
+            DOM.yearGrid.addEventListener('click', (e) => {
+                const cell = e.target.closest('.year-cell');
+                if (!cell) return;
+                YearGrid.select(parseInt(cell.dataset.year, 10));
+            });
+
+            this.blockStart = this.getBlockStart(currentYear);
+            this.renderBlock();
+        },
+
+        // 分块起点按甲子对齐（(y-4)%60===0 的年份为甲子年），
+        // 首块从最小年份起（不齐则截短），尾块到最大年份止
+        getBlockStart(year) {
+            if (year <= CONFIG.MIN_YEAR) return CONFIG.MIN_YEAR;
+            const s = 4 + 60 * Math.floor((year - 4) / 60);
+            return Math.max(s, CONFIG.MIN_YEAR);
+        },
+
+        // 当前分块的下一个分块起点；返回 null 表示已是最后一块
+        getNextBlockStart() {
+            let next;
+            if (this.blockStart === CONFIG.MIN_YEAR && (CONFIG.MIN_YEAR - 4) % 60 !== 0) {
+                next = 4 + 60 * (Math.floor((CONFIG.MIN_YEAR - 4) / 60) + 1);
+            } else {
+                next = this.blockStart + 60;
+            }
+            return next > CONFIG.MAX_YEAR ? null : next;
+        },
+
+        getBlockEnd(start) {
+            let next = (start === CONFIG.MIN_YEAR && (CONFIG.MIN_YEAR - 4) % 60 !== 0)
+                ? 4 + 60 * (Math.floor((CONFIG.MIN_YEAR - 4) / 60) + 1)
+                : start + 60;
+            return Math.min(next - 1, CONFIG.MAX_YEAR);
+        },
+
+        // 只渲染当前分块（60 年）的年份格子
+        renderBlock() {
+            const end = this.getBlockEnd(this.blockStart);
             let html = '';
-            for (let y = CONFIG.MIN_YEAR; y <= CONFIG.MAX_YEAR; y++) {
+            for (let y = this.blockStart; y <= end; y++) {
                 const ganZhi = GanZhiUtil.getLunarGanZhi(y);
                 html += `<div class="year-cell ${y === currentYear ? 'selected' : ''}" data-year="${y}">
                     <span class="year-num">${y}</span>
@@ -258,33 +198,43 @@ const LunarCalendar = (function () {
             }
             DOM.yearGrid.innerHTML = html;
 
-            DOM.yearGrid.querySelectorAll('.year-cell').forEach(cell => {
-                cell.addEventListener('click', () => {
-                    const y = parseInt(cell.dataset.year, 10);
-                    YearGrid.select(y);
-                });
-            });
+            if (DOM.blockRangeText) {
+                DOM.blockRangeText.textContent = `${this.blockStart}-${end}`;
+            }
         },
 
         select(year) {
             if (year < CONFIG.MIN_YEAR || year > CONFIG.MAX_YEAR) return;
             currentYear = year;
 
-            DOM.yearGrid.querySelectorAll('.year-cell').forEach(cell => {
-                cell.classList.toggle('selected', parseInt(cell.dataset.year, 10) === currentYear);
-            });
+            const bs = this.getBlockStart(year);
+            if (bs !== this.blockStart) {
+                this.blockStart = bs;
+                this.renderBlock();
+            } else {
+                DOM.yearGrid.querySelectorAll('.year-cell').forEach(cell => {
+                    cell.classList.toggle('selected', parseInt(cell.dataset.year, 10) === currentYear);
+                });
+            }
 
             YearInfo.update();
-            YearGrid.scrollToSelected();
         },
 
-        scrollToSelected() {
-            const selected = DOM.yearGrid.querySelector('.year-cell.selected');
-            if (selected) {
-                selected.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+        // < > 按钮：整块切换（60年），只翻页不改变选中年份
+        goToPrevBlock() {
+            if (this.blockStart <= CONFIG.MIN_YEAR) return;
+            this.blockStart = this.getBlockStart(this.blockStart - 1);
+            this.renderBlock();
         },
 
+        goToNextBlock() {
+            const next = this.getNextBlockStart();
+            if (next === null) return;
+            this.blockStart = next;
+            this.renderBlock();
+        },
+
+        // 键盘左右键：仍按年步进，跨块时自动切块
         goToPrevYear() {
             if (currentYear > CONFIG.MIN_YEAR) {
                 this.select(currentYear - 1);
@@ -313,14 +263,12 @@ const LunarCalendar = (function () {
 
     const YearInfo = {
         update() {
-            DOM.currentYearText.textContent = currentYear;
-
             try {
                 const ganZhi = GanZhiUtil.getLunarGanZhi(currentYear);
                 const zodiac = GanZhiUtil.getZodiacByGanZhi(ganZhi);
                 const flowerName = GanZhiUtil.getGanZhiFlowerName(ganZhi);
 
-                DOM.ganZhiSpan.textContent = `${ganZhi} · ${zodiac}`;
+                DOM.ganZhiSpan.textContent = `${currentYear}年 ${ganZhi} · ${zodiac}`;
 
                 const lunarYearNum = GanZhiUtil.getLunarYearNum(currentYear);
                 const lunarYear = LunarYear.fromYear(lunarYearNum);
@@ -450,8 +398,9 @@ const LunarCalendar = (function () {
 
     const EventHandler = {
         bind() {
-            DOM.prevYearBtn.addEventListener('click', YearGrid.goToPrevYear.bind(YearGrid));
-            DOM.nextYearBtn.addEventListener('click', YearGrid.goToNextYear.bind(YearGrid));
+            // < > 按钮：切换上一/下一甲子（60年分块）
+            DOM.prevYearBtn.addEventListener('click', YearGrid.goToPrevBlock.bind(YearGrid));
+            DOM.nextYearBtn.addEventListener('click', YearGrid.goToNextBlock.bind(YearGrid));
             DOM.toggleGridBtn.addEventListener('click', YearGrid.toggle.bind(YearGrid));
 
             document.addEventListener('keydown', (e) => {
@@ -506,7 +455,7 @@ const LunarCalendar = (function () {
         DOM.yearGrid = document.getElementById('yearGrid');
         DOM.prevYearBtn = document.getElementById('prevYear');
         DOM.nextYearBtn = document.getElementById('nextYear');
-        DOM.currentYearText = document.getElementById('currentYearText');
+        DOM.blockRangeText = document.getElementById('blockRangeText');
         DOM.ganZhiSpan = document.getElementById('ganZhi');
         DOM.yearInfoDiv = document.getElementById('yearInfo');
         DOM.toggleGridBtn = document.getElementById('toggleGrid');
@@ -554,9 +503,8 @@ const LunarCalendar = (function () {
                 const femaleRadio = document.querySelector('input[name="gender"][value="female"]');
                 if (femaleRadio) femaleRadio.checked = true;
             }
-            // 自动计算
-            const baZi = calculateBaZi(dateKey, hour, minute, gender);
-            showBaZi(baZi);
+            // 自动调用八字结果页
+            showBaZiPage(dateKey, hour, minute, gender);
 
             // 自动滚动到八字结果区域
             setTimeout(function () {
@@ -647,655 +595,57 @@ const LunarCalendar = (function () {
                 const time = timeInput.value;
                 const [hour, minute] = time.split(':').map(Number);
                 const gender = document.querySelector('input[name="gender"]:checked').value;
-                const baZi = calculateBaZi(dateKey, hour, minute, gender);
-                showBaZi(baZi);
-
+                // 八字结果封装为独立页面 bazi.html，这里只负责调用
+                showBaZiPage(dateKey, hour, minute, gender);
             });
         }
     }
-    //得出八字数据
-    function calculateBaZi(dateKey, hour, minute, gender) {
+    // ====== 八字结果页调用（结果区封装在 bazi.html + bazi.js）======
+    // 点击"确定"后不再本页计算渲染，而是内嵌 iframe 调用独立页面 bazi.html
+    function showBaZiPage(dateKey, hour, minute, gender) {
         const [year, month, day] = dateKey.split('-').map(Number);
-        const solarTime = SolarTime.fromYmdHms(year, month, day, hour, minute, 0);
-        const lunarHour = solarTime.getLunarHour();
-        const eightChar = lunarHour.getEightChar();
-        // 1. 一路向上追溯到农历年对象 (LunarYear)
-        const lunarYear = lunarHour.getLunarDay().getLunarMonth().getLunarYear();
 
-        // 2. 获取农历年份的数字（例如：2026）
-        const lunarYearNum = lunarYear.getYear();
-
-        var dayun = {
-            startTime: null,
-            endTime: null,
-            dayuns: []
-        };
-        // 获取司令分野（按 rysl.json 藏干天数分配）
-        const siLing = getSiLingFromRysl(solarTime);
-
-        // 起运信息
-        const genderCode = gender === 'male' ? 1 : 0;
-        const childLimit = ChildLimit.fromSolarTime(solarTime, genderCode);
-
-        dayun.startTime = childLimit.info.startTime;
-        dayun.endTime = childLimit.info.endTime;
-        //交运
-        let jiaoYun = null;
-        let qishi = null;
-        // 用童限结束时间计算交运时间
-        if (dayun && dayun.endTime) {
-            const et = dayun.endTime;
-            jiaoYun = BaZiCalc.getLastJieQiDiff({
-                year: et.getYear(),
-                month: et.getMonth(),
-                day: et.getDay(),
-                hour: et.getHour(),
-                minute: et.getMinute(),
-                second: et.getSecond()
-            });
-            const st = dayun.startTime;
-            qishi = BaZiCalc.getLastJieQiDiff({
-                year: st.getYear(),
-                month: st.getMonth(),
-                day: st.getDay(),
-                hour: st.getHour(),
-                minute: st.getMinute(),
-                second: st.getSecond()
-            })
-        }
-
-
-
-        // console.log(lunarYear.year, eightChar.getMonth().getName(), jiaoYun.yearGan);
-        // 大运顺逆：男逢阳年/女逢阴年顺行(1)，男逢阴年/女逢阳年逆行(0)
-        const yearGan = eightChar.getYear().getName().charAt(0);
-        const isYangGan = '甲丙戊庚壬'.includes(yearGan);
-        const isMale = gender === 'male';
-        const dayunDirection = (isMale === isYangGan) ? 1 : 0;
-        dayun.dayuns = BaZiCalc.findYearsByGanZhi({ year, month, day, hour, minute }, jiaoYun.yearGan, eightChar.getMonth().getName(), dayunDirection, genderCode);
-
-        // 从出生年到未来若干年的逐年信息
-        const birthYear = year;
-        const endYear = birthYear + 70;
-        const yearlyFortunes = [];
-        const firstFortune = childLimit.getStartFortune();
-        const firstDecade = childLimit.getStartDecadeFortune();
-        for (let y = birthYear; y <= endYear; y++) {
-            const offset = y - childLimit.getEndSixtyCycleYear().getYear();
-            const fortune = firstFortune.next(offset);
-            const xiaoYun = fortune.getName();
-            const age = fortune.getAge();
-
-            // 判断该年所属大运（以 firstDecade.getStartSixtyCycleYear 为基准，每10年1步）
-            let daYunName = '';
-            const startDecadeYear = firstDecade.getStartSixtyCycleYear().getYear();
-            let daYunIndex = Math.floor((y - startDecadeYear) / 10);
-            if (daYunIndex < 0) {
-                daYunName = '';
-            } else {
-                const decade = firstDecade.next(daYunIndex);
-                daYunName = decade.getName();
-            }
-
-            yearlyFortunes.push({
-                year: y,
-                age: age,
-                daYun: daYunName,
-                xiaoYun: xiaoYun
-            });
-        }
-
-        return {
-            qianKun: gender === 'male' ? '乾' : '坤',
-            year: eightChar.getYear().getName(),
-            month: eightChar.getMonth().getName(),
-            day: eightChar.getDay().getName(),
-            hour: eightChar.getHour().getName(),
-            siLing: siLing,
-            taiYuan: eightChar.getFetalOrigin().getName(),
-            yearlyFortunes: yearlyFortunes,
-            childLimit: childLimit,
-            dayun: dayun,
-            birthYear: lunarYearNum,
-            birthDate: `${year}年${month}月${day}日 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
-            solarDate: `${year}年${month}月${day}日`,
-            lunarDate: `${lunarHour.getLunarDay().getLunarMonth().getName()}${lunarHour.getLunarDay().getName()}`,
-            shiChen: GanZhiUtil.getShiChen(hour),
-            inputParams: { year, month, day, hour, minute, gender },
-            jiaoYun: jiaoYun,
-            qishi: qishi
-        };
-    }
-
-    function showBaZi(baZi) {
-        currentBaZi = baZi;
         let existing = document.getElementById('baZiArea');
         if (existing) {
             existing.remove();
         }
 
-        let daYunHtml = '';
-        if (baZi.dayun && baZi.dayun.dayuns && baZi.dayun.dayuns.length > 0) {
-            const dayuns = baZi.dayun.dayuns.slice(0, 12);
+        const src = 'bazi.html?y=' + year + '&m=' + month + '&d=' + day +
+            '&h=' + hour + '&min=' + minute + '&g=' + gender;
 
-            let yearCells = `<td class="dayun-cell" data-dayun-index="pre">${baZi.birthYear}</td>`;
-            let ageCells = `<td class="dayun-cell" data-dayun-index="pre">1~${dayuns[0].startAge}岁</td>`;
-            let ganCells = `<td class="dayun-cell" data-dayun-index="pre">小运</td>`;
-
-            dayuns.forEach((item, idx) => {
-                const year = item.starYear;
-                const colIdx = idx + 1;
-
-                yearCells += `<td class="dayun-cell" data-dayun-index="${colIdx}">${year}</td>`;
-                ageCells += `<td class="dayun-cell" data-dayun-index="${colIdx}">${item.startAge}岁</td>`;
-                ganCells += `<td class="dayun-cell" data-dayun-index="${colIdx}">${item.dayunganzhi}</td>`;
-            });
-
-            daYunHtml = `
-                <div >
-                    <table class="dayun-table" id="dayunTable">
-                        <tr>${yearCells}</tr>
-                        <tr>${ageCells}</tr>
-                        <tr>${ganCells}</tr>
-                    </table>
-                    <div id="liuNianArea"></div>
-                </div>
-            `;
-        }
-
-
-
-
-
-        const html = `
-            <div id="baZiArea" class="bazi-area">
-                <div class="bazi-layout">
-                    <table class="bazi-table">
-                        <tr>
-                            <th>${baZi.qianKun}</th>
-                            <th>年</th>
-                            <th>月</th>
-                            <th>日</th>
-                            <th>时</th>
-                        </tr>
-                        <tr>
-                            <th>干</th>
-                            <td>${baZi.year.charAt(0)}</td>
-                            <td>${baZi.month.charAt(0)}</td>
-                            <td>${baZi.day.charAt(0)}</td>
-                            <td>${baZi.hour.charAt(0)}</td>
-                        </tr>
-                        <tr>
-                            <th>支</th>
-                            <td>${baZi.year.charAt(1)}</td>
-                            <td>${baZi.month.charAt(1)}</td>
-                            <td>${baZi.day.charAt(1)}</td>
-                            <td>${baZi.hour.charAt(1)}</td>
-                        </tr>
-                    </table>
-                    <div class="siling-box">
-                        <div class="siling-title">司令分野</div>
-                        <div class="siling-content">${baZi.siLing}</div>
-                    </div>
-                    <div class="siling-box">
-                        <div class="siling-title">胎元</div>
-                        <div class="siling-content">${baZi.taiYuan}</div>
-                    </div>
-                    <div class="siling-box">
-                        <div class="siling-title">交运时间</div>
-                        <div class="siling-content">
-                            ${baZi.jiaoYun ? `
-                                ${baZi.jiaoYun.jieQi}后${baZi.jiaoYun.days}天${baZi.jiaoYun.hours}小时
-                                <br>
-                                (${baZi.jiaoYun.jiaoYunGan})
-                            ` : '—'}
-                        </div>
-                    </div>
-                </div>
-                ${daYunHtml}
-                <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center;">
-                    <button id="exportBtn" class="export-btn">复制八字</button>
-                    <button id="saveBtn" class="export-btn">保存</button>
-                </div>
-            </div>
-        `;
+        const frame = document.createElement('iframe');
+        frame.id = 'baZiArea';
+        frame.className = 'bazi-frame';
+        frame.src = src;
+        frame.title = '八字排盘结果';
+        frame.style.cssText = 'width:100%;border:none;min-height:300px;display:block;margin-top:12px;';
 
         const timeInputArea = document.getElementById('timeInputArea');
-        timeInputArea.insertAdjacentHTML('afterend', html);
-
-        bindDayunEvents();
-        bindExportEvent();
-    }
-    //保存按钮的功能
-    function bindExportEvent() {
-        const btn = document.getElementById('exportBtn');
-        if (!btn) return;
-        btn.addEventListener('click', () => exportBaZi(currentBaZi));
-        var saveBtn = document.getElementById('saveBtn');
-        if (saveBtn) {
-            saveBtn.addEventListener('click', function () {
-                showSaveDialog(function (name, desc) {
-                    saveCurrentToGitee(name, desc);
-                });
-            });
-        }
+        timeInputArea.insertAdjacentElement('afterend', frame);
     }
 
-    function showSaveDialog(onConfirm) {
-        var existing = document.getElementById('saveDialog');
-        if (existing) existing.remove();
-
-        var overlay = document.createElement('div');
-        overlay.id = 'saveDialog';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;display:flex;justify-content:center;align-items:center;';
-
-        var box = document.createElement('div');
-        box.style.cssText = 'background:#fff;border:1px solid #000;padding:25px;width:360px;';
-        box.innerHTML =
-            '<h3 style="margin-bottom:15px;font-size:16px;font-weight:normal;text-align:center;">保存案例</h3>' +
-            '<label style="display:block;margin-bottom:5px;font-size:13px;">案例名称</label>' +
-            '<input type="text" id="saveNameInput" style="width:100%;padding:8px;border:1px solid #000;font-size:14px;margin-bottom:15px;box-sizing:border-box;" placeholder="如：张三" autofocus />' +
-            '<label style="display:block;margin-bottom:5px;font-size:13px;">描述（选填）</label>' +
-            '<textarea id="saveDescInput" rows="3" style="width:100%;padding:8px;border:1px solid #000;font-size:14px;margin-bottom:15px;box-sizing:border-box;resize:vertical;font-family:inherit;" placeholder="可填写备注信息，也可留空"></textarea>' +
-            '<div style="display:flex;gap:10px;justify-content:center;">' +
-            '<button id="saveCancelBtn" style="border:1px solid #000;background:#fff;color:#000;padding:8px 24px;font-size:14px;cursor:pointer;font-family:inherit;">取消</button>' +
-            '<button id="saveConfirmBtn" style="border:1px solid #000;background:#000;color:#fff;padding:8px 24px;font-size:14px;cursor:pointer;font-family:inherit;">确认</button>' +
-            '</div>';
-
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-
-        var nameInput = document.getElementById('saveNameInput');
-        var descInput = document.getElementById('saveDescInput');
-        nameInput.focus();
-
-        function close() { overlay.remove(); }
-
-        function confirm() {
-            var name = nameInput.value.trim() || '未命名';
-            var desc = descInput.value.trim();
-            close();
-            onConfirm(name, desc);
-        }
-
-        document.getElementById('saveCancelBtn').addEventListener('click', close);
-        document.getElementById('saveConfirmBtn').addEventListener('click', confirm);
-        nameInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') confirm();
-            if (e.key === 'Escape') close();
-        });
-
-        overlay.addEventListener('click', function (e) {
-            if (e.target === overlay) close();
-        });
-    }
-
-    // 把 months 数组里的 SolarTime 类实例转成纯数据，避免 JSON.stringify 循环引用
-    function serializeMonths(months) {
-        if (!months || !months.length) return [];
-        return months.map(function (m) {
-            var sd = m.solarDate;
-            var dateObj = null;
-            if (sd) {
-                // SolarTime 实例 / 或字符串两种兼容
-                if (typeof sd.getYear === 'function') {
-                    dateObj = {
-                        year: sd.getYear(),
-                        month: sd.getMonth(),
-                        day: sd.getDay(),
-                        hour: sd.getHour(),
-                        minute: sd.getMinute()
-                    };
-                } else if (typeof sd === 'string') {
-                    // 形如 "YYYY-MM-DD HH:mm"
-                    var m1 = sd.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})/);
-                    if (m1) {
-                        dateObj = {
-                            year: parseInt(m1[1], 10),
-                            month: parseInt(m1[2], 10),
-                            day: parseInt(m1[3], 10),
-                            hour: parseInt(m1[4], 10),
-                            minute: parseInt(m1[5], 10)
-                        };
-                    } else {
-                        dateObj = null;
-                    }
+    // 接收 bazi.html 子页面的高度上报，让 iframe 自适应内容高度
+    // 守卫：高度没有实质变化时不更新，避免 iframe 增高 → 子页 resize → 再上报的循环
+    window.addEventListener('message', (e) => {
+        const d = e.data;
+        if (d && d.type === 'baziHeight' && d.height) {
+            const frame = document.getElementById('baZiArea');
+            if (frame) {
+                const h = Math.ceil(d.height) + 4;
+                if (Math.abs(frame.getBoundingClientRect().height - h) > 2) {
+                    frame.style.height = h + 'px';
                 }
             }
-            var dateStr = '';
-            if (dateObj) {
-                dateStr = dateObj.year + '-' + String(dateObj.month).padStart(2, '0') + '-' + String(dateObj.day).padStart(2, '0') + ' ' +
-                    String(dateObj.hour).padStart(2, '0') + ':' + String(dateObj.minute).padStart(2, '0');
-            }
-            return {
-                JieQi: m.JieQi,
-                ganZhi: m.ganZhi,
-                solarDate: dateObj,
-                solarDateStr: dateStr
-            };
-        });
-    }
-    function saveCurrentToGitee(caseName, desc) {
-        var bz = currentBaZi;
-        if (!bz || !bz.inputParams) return;
-
-        var p = bz.inputParams;
-        // 【精简保存体积】大运、12步大运数组、70年流年 yearlyFortunes 一律不保存！
-        // 详情页打开时用下方 inputParams 调用项目原有 calculateBaZi 现场重新生成，完全等价
-        // 仅保留 复制八字按钮所需的小字段（字符串）+ 重算必需的种子信息
-        var fullBazi = {
-            qianKun: bz.qianKun,
-            year: bz.year,
-            month: bz.month,
-            day: bz.day,
-            hour: bz.hour,
-            siLing: bz.siLing,
-            taiYuan: bz.taiYuan,
-            birthYear: bz.birthYear,
-            birthDate: bz.birthDate,
-            solarDate: bz.solarDate,
-            lunarDate: bz.lunarDate,
-            shiChen: bz.shiChen,
-            inputParams: bz.inputParams,   // ★重算大运流年流月的唯一入口（年月日时分性别）
-            jiaoYun: bz.jiaoYun || null,   // 小字段，仅用于详情快速展示
-            qishi: bz.qishi || null        // 小字段，仅用于童限分段
-        };
-        var newRecord = {
-            id: 'r-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-            name: caseName,
-            gender: p.gender === 'male' ? '男' : '女',
-            solar: p.year + '-' + String(p.month).padStart(2, '0') + '-' + String(p.day).padStart(2, '0') + ' ' + String(p.hour).padStart(2, '0') + ':' + String(p.minute || 0).padStart(2, '0'),
-            year: p.year, month: p.month, day: p.day, hour: p.hour, minute: p.minute || 0,
-            bazi: { year: bz.year, month: bz.month, day: bz.day, hour: bz.hour },
-            fullBazi: fullBazi,
-            note: desc || '',
-            createdAt: Math.floor(Date.now() / 1000)
-        };
-
-        var btn = document.getElementById('exportBtn');
-        var origText = btn ? btn.textContent : '';
-        var restoreTimer = null;
-        if (btn) {
-            btn.textContent = '保存中...';
-            btn.disabled = true;
-            // 15 秒兜底恢复（防止网络挂了按钮一直灰）
-            restoreTimer = setTimeout(function () {
-                btn.textContent = origText;
-                btn.disabled = false;
-            }, 15000);
         }
-
-        fetch('https://gitee.com/api/v5/repos/a-treasure-trove-of-wisdom/bazi-data/contents/data/records.json?access_token=f66594ca2bba32caad9d255b278dcabd')
-            .then(function (res) { return res.json(); })
-            .then(function (file) {
-                // 解码旧数据
-                var text = atob((file.content || '').replace(/\n/g, ''));
-                var decoded = decodeURIComponent(escape(text));
-                var data = JSON.parse(decoded || '{"records":[]}');
-                var records = data.records || [];
-
-                // 新命例插到数组最前面
-                records.unshift(newRecord);
-
-                // 编码 & PUT 保存
-                var content = JSON.stringify({ records: records }, null, 2);
-                var b64 = btoa(unescape(encodeURIComponent(content)));
-                return fetch('https://gitee.com/api/v5/repos/a-treasure-trove-of-wisdom/bazi-data/contents/data/records.json', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        access_token: 'f66594ca2bba32caad9d255b278dcabd',
-                        message: 'update records via app',
-                        content: b64,
-                        sha: file.sha,
-                        branch: 'master'
-                    })
-                }).then(function (r) {
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    return r.json();
-                });
-            })
-            .then(function () {
-                if (restoreTimer) clearTimeout(restoreTimer);
-                if (btn) { btn.textContent = origText; btn.disabled = false; }
-                alert('保存成功！命例已写入 Gitee 仓库。');
-            })
-            .catch(function (e) {
-                if (btn) btn.textContent = origText;
-                alert('保存失败: ' + e.message);
-            });
-    }
-
-    function exportBaZi(baZi) {
-        if (!baZi) return;
-
-        let text = '';
-        text += `性别：${baZi.inputParams.gender === 'male' ? '男' : '女'}\n`;
-        text += `公历：${baZi.solarDate} ${baZi.shiChen}\n`;
-        text += `农历：${baZi.lunarDate} ${baZi.shiChen}\n`;
-        text += '\n';
-        text += `司令：${baZi.siLing}\n`;
-        text += `胎元：${baZi.taiYuan}\n`;
-        if (baZi.jiaoYun) {
-            text += `交运：${baZi.jiaoYun.jieQi}${baZi.jiaoYun.days}天${baZi.jiaoYun.hours}小时（${baZi.jiaoYun.jiaoYunGan}）\n`;
-        }
-        text += '\n';
-        text += `${baZi.year} ${baZi.month} ${baZi.day} ${baZi.hour}`;
-        text += '\n\n';
-
-        if (baZi.dayun && baZi.dayun.dayuns && baZi.dayun.dayuns.length > 0) {
-            const dayuns = baZi.dayun.dayuns.slice(0, 12);
-            const dayunStr = dayuns.map(item => {
-                const year = item.starYear || '';
-                return `${item.dayunganzhi}（${year}，${item.startAge}）`;
-            }).join(' ');
-            text += dayunStr;
-        }
-
-        // 复制到剪贴板（file:// 协议下 navigator.clipboard 不可用，统一用降级方案）
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        let ok = false;
-        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-        document.body.removeChild(ta);
-
-        // execCommand 失败时再尝试 Clipboard API
-        if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).catch(() => { });
-        }
-
-        const btn = document.getElementById('exportBtn');
-        if (btn) {
-            const origText = btn.textContent;
-            btn.textContent = '已复制';
-            setTimeout(() => { btn.textContent = origText; }, 1500);
-        }
-    }
-    //大运添加点击事件
-    function bindDayunEvents() {
-        const table = document.getElementById('dayunTable');
-        if (!table) return;
-
-        table.addEventListener('click', (e) => {
-
-            const cell = e.target.closest('.dayun-cell');
-            if (!cell) return;
-
-            const idx = cell.dataset.dayunIndex;
-            document.querySelectorAll('.dayun-cell').forEach(c => {
-                c.classList.remove('selected');
-            });
-            document.querySelectorAll(`.dayun-cell[data-dayun-index="${idx}"]`).forEach(c => {
-                c.classList.add('selected');
-            });
-            //生成流年流月
-            renderLiuNian(idx);
-        });
-
-        table.addEventListener('mouseover', (e) => {
-            const cell = e.target.closest('.dayun-cell');
-            if (!cell) return;
-
-            const idx = cell.dataset.dayunIndex;
-            document.querySelectorAll(`.dayun-cell[data-dayun-index="${idx}"]`).forEach(c => {
-                c.classList.add('hover');
-            });
-        });
-
-        table.addEventListener('mouseout', (e) => {
-            const cell = e.target.closest('.dayun-cell');
-            if (!cell) return;
-
-            const idx = cell.dataset.dayunIndex;
-            document.querySelectorAll(`.dayun-cell[data-dayun-index="${idx}"]`).forEach(c => {
-                c.classList.remove('hover');
-            });
-        });
-    }
-    function bindLiuNianEvent() {
-        const table = document.getElementById('liuNianTable');
-        if (!table) return;
-        table.addEventListener('click', (e) => {
-
-            const cell = e.target.closest('.liunian-cell');
-            if (!cell) return;
-            const idx = cell.dataset.liunianIndex;
-
-            document.querySelectorAll('.liunian-cell').forEach(c => {
-                c.classList.remove('selected');
-            });
-            document.querySelectorAll(`.liunian-cell[data-liunian-index="${idx}"]`).forEach(c => {
-                c.classList.add('selected');
-            });
-
-            renderLiuYue(idx);
-        });
-        table.addEventListener('mouseover', (e) => {
-            const cell = e.target.closest('.liunian-cell');
-            if (!cell) return;
-            const idx = cell.dataset.liunianIndex;
-
-            document.querySelectorAll(`.liunian-cell[data-liunian-index="${idx}"]`).forEach(c => {
-                c.classList.add('hover');
-            });
-        });
-
-        table.addEventListener('mouseout', (e) => {
-            const cell = e.target.closest('.liunian-cell');
-            if (!cell) return;
-            const idx = cell.dataset.liunianIndex;
-
-            document.querySelectorAll(`.liunian-cell[data-liunian-index="${idx}"]`).forEach(c => {
-                c.classList.remove('hover');
-            });
-        });
-    }
-    //流年流月
-    function renderLiuNian(dayunIndex) {
-
-        const area = document.getElementById('liuNianArea');
-        if (!area || !currentBaZi) return;
-
-
-        let filtered = [];
-        let title = '流年';
-
-        if (dayunIndex === 'pre') {
-            title = '起运前流年';
-        } else {
-            const idx = parseInt(dayunIndex, 10) - 1;
-            const dayuns = currentBaZi.dayun.dayuns.slice(0, 12);
-            const selected = dayuns[idx];
-            title = `${selected.dayunganzhi}大运·流年`;
-        }
-        let genderCode = currentBaZi.qianKun === "乾" ? 1 : 0; // 1为男 0为女
-        // 出生日期
-      
-        if (dayunIndex == 'pre') {
-
-            filtered = BaZiCalc.getYearRange(BaZiCalc.dateZhuanhuan(currentBaZi.birthDate), genderCode);
-
-        } else {
-            filtered = BaZiCalc.generateLunarMonths(BaZiCalc.dateZhuanhuan(currentBaZi.birthDate), genderCode,dayunIndex - 1);
-        }
-        currentBaZi.liunians = filtered;
-
-        if (filtered.length === 0) {
-            area.innerHTML = '<div class="liunian-empty">该阶段暂无流年数据</div>';
-            return;
-        }
-
-        let yearCells = `<th class="liunian-title">${title}</th>`;
-        let ageCells = `<th></th>`;
-        let ganCells = `<th></th>`;
-
-        filtered.forEach((item, ids) => {
-            const colIdx = ids;
-            yearCells += `<td class="liunian-cell" data-liunian-index="${colIdx}">${item.year}</td>`;
-            ageCells += `<td class="liunian-cell" data-liunian-index="${colIdx}">${item.nianling}岁</td>`;
-            ganCells += `<td class="liunian-cell" data-liunian-index="${colIdx}">${item.yearGanZhi}</td>`;
-        });
-
-        area.innerHTML = `
-            <table class="liunian-table" id="liuNianTable">
-                <tr>${yearCells}</tr>
-                <tr>${ageCells}</tr>
-                <tr>${ganCells}</tr>
-            </table>
-            <div id="liuYueArea"></div>
-        `;
-        bindLiuNianEvent();
-    }
-
-    function renderLiuYue(liuNianIndex) {
-        const area = document.getElementById('liuYueArea');
-        if (!area || !currentBaZi) return;
-
-        let filtered = [];
-        let title = '流月';
-        filtered = currentBaZi.liunians[liuNianIndex].months;
-        let jieQiCells = `<th class="liunian-title">${title}</th>`;
-        let timeCells = `<th></th>`;
-        let ganzhiCells = `<th></th>`;
-
-        filtered.forEach((item, ids) => {
-
-            jieQiCells += `<td class="" >${item.JieQi}</td>`;
-            timeCells += `<td class="" >${item.solarDate.month}/${item.solarDate.day}</td>`;
-            ganzhiCells += `<td class="" >${item.ganZhi}</td>`;
-        })
-        area.innerHTML = `
-            <table class="liuyue-table" >
-                <tr>${jieQiCells}</tr>
-                <tr>${timeCells}</tr>
-                <tr>${ganzhiCells}</tr>
-            </table>
-            
-        `;
-
-    }
-
- 
-
-   
+    });
 
     return {
         init, config: CONFIG, ganZhiUtil: GanZhiUtil, yearGrid: YearGrid, yearInfo: YearInfo,
-        // 仅用于调试，外部可访问
+        // 仅用于调试，外部可访问（八字计算/渲染已迁移至 bazi.html + bazi.js）
         __dbg: {
-            calculateBaZi: calculateBaZi,
-     
-            
             getLunarYearGanZhiFromSolar: getLunarYearGanZhiFromSolar,
-            getSiLingFromRysl: getSiLingFromRysl,
-           
-            serializeMonths: serializeMonths,
-            RYSL_DATA: RYSL_DATA,
+            getSiLingFromRysl: (window.BaZiCalc && window.BaZiCalc.getSiLingFromRysl) || null,
+            RYSL_DATA: (window.BaZiCalc && window.BaZiCalc.RYSL_DATA) || null,
             GAN_HE_MAP: GAN_HE_MAP
         }
     };
@@ -1327,7 +677,6 @@ document.addEventListener('DOMContentLoaded', LunarCalendar.init);
     global.LunarList = {
         viewRecord: _viewRecord,
         detailRecord: _detailRecord,
-        showNotesRecord: global.NotesSystem.showNotesRecord,
         deleteRecord: global.RecordList.deleteRecord,
         refresh: global.RecordList.loadAndRenderList
     };

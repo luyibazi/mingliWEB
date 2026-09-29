@@ -406,6 +406,166 @@
         });
     }
 
+    // rysl.json · 十二地支藏干人元司令分日用事
+    // 顺序：寅(立春) → 卯(惊蛰) → 辰(清明) → 巳(立夏) → 午(芒种) → 未(小暑)
+    //       申(立秋) → 酉(白露) → 戌(寒露) → 亥(立冬) → 子(大雪) → 丑(小寒)
+    // 算法：前面各段按固定天数，最后一段吃掉当月剩余所有天数（不论月大月小）
+    const RYSL_DATA = [
+        { 月份: '寅月', 节气: '立春', 分日用事: [{ 天数: 7, 藏干: '戊' }, { 天数: 7, 藏干: '丙' }, { 天数: 16, 藏干: '甲' }] },
+        { 月份: '卯月', 节气: '惊蛰', 分日用事: [{ 天数: 10, 藏干: '甲' }, { 天数: 20, 藏干: '乙' }] },
+        { 月份: '辰月', 节气: '清明', 分日用事: [{ 天数: 9, 藏干: '乙' }, { 天数: 3, 藏干: '癸' }, { 天数: 18, 藏干: '戊' }] },
+        { 月份: '巳月', 节气: '立夏', 分日用事: [{ 天数: 5, 藏干: '戊' }, { 天数: 9, 藏干: '庚' }, { 天数: 16, 藏干: '丙' }] },
+        { 月份: '午月', 节气: '芒种', 分日用事: [{ 天数: 10, 藏干: '丙' }, { 天数: 9, 藏干: '己' }, { 天数: 11, 藏干: '丁' }] },
+        { 月份: '未月', 节气: '小暑', 分日用事: [{ 天数: 9, 藏干: '丁' }, { 天数: 3, 藏干: '乙' }, { 天数: 18, 藏干: '己' }] },
+        { 月份: '申月', 节气: '立秋', 分日用事: [{ 天数: 10, 藏干: '戊' }, { 天数: 3, 藏干: '壬' }, { 天数: 17, 藏干: '庚' }] },
+        { 月份: '酉月', 节气: '白露', 分日用事: [{ 天数: 10, 藏干: '庚' }, { 天数: 20, 藏干: '辛' }] },
+        { 月份: '戌月', 节气: '寒露', 分日用事: [{ 天数: 9, 藏干: '辛' }, { 天数: 3, 藏干: '丁' }, { 天数: 18, 藏干: '戊' }] },
+        { 月份: '亥月', 节气: '立冬', 分日用事: [{ 天数: 7, 藏干: '戊' }, { 天数: 5, 藏干: '甲' }, { 天数: 18, 藏干: '壬' }] },
+        { 月份: '子月', 节气: '大雪', 分日用事: [{ 天数: 10, 藏干: '壬' }, { 天数: 20, 藏干: '癸' }] },
+        { 月份: '丑月', 节气: '小寒', 分日用事: [{ 天数: 9, 藏干: '癸' }, { 天数: 3, 藏干: '辛' }, { 天数: 18, 藏干: '己' }] }
+    ];
+
+    /**
+     * 按 rysl.json 的分日用事天数计算司令分野
+     * 算法：前面各段按固定天数累加，最后一段吃掉当月剩余所有天数
+     * @param {SolarTime} solarTime
+     * @returns {string} 例如 "癸司令（清明第12.3天，距立夏17.8天）"
+     */
+    function getSiLingFromRysl(solarTime) {
+        try {
+            const targetJD = solarTime.getJulianDay();
+            const y = solarTime.getYear();
+
+            const ryslJieNames = RYSL_DATA.map(x => x.节气);
+
+            // 收集 targetYear ±1 年内所有「节」，带 JulianDay 和 RYSL 索引
+            const candidates = [];
+            for (let yy = y - 1; yy <= y + 1; yy++) {
+                for (let i = 0; i < 24; i++) {
+                    try {
+                        const term = SolarTerm.fromIndex(yy, i);
+                        if (!term.isJie()) continue;
+                        const name = term.getName();
+                        const idx = ryslJieNames.indexOf(name);
+                        if (idx === -1) continue;
+                        candidates.push({
+                            term: term,
+                            jd: term.getJulianDay(),
+                            ryslIdx: idx
+                        });
+                    } catch (e) { }
+                }
+            }
+            candidates.sort((a, b) => a.jd - b.jd);
+
+            // 找到 <= targetJD 的最后一个节（当前月令起始）
+            let curIdx = -1;
+            for (let i = 0; i < candidates.length; i++) {
+                if (candidates[i].jd <= targetJD) curIdx = i;
+                else break;
+            }
+            if (curIdx === -1 || curIdx + 1 >= candidates.length) return '—';
+
+            const curJie = candidates[curIdx];
+            const nextJie = candidates[curIdx + 1];
+            const monthData = RYSL_DATA[curJie.ryslIdx];
+
+            // 已过天数（0-based 小数：交节时刻=0天）
+            const elapsedDays = targetJD - curJie.jd;
+            // 距下一节天数
+            const remainDays = nextJie.jd - targetJD;
+
+            const jieName = curJie.term.getName();
+            const nextJieName = nextJie.term.getName();
+
+            // 分段命中：前面各段按固定天数逐段累加，最后一段吃掉当月剩余所有天数
+            // 亥月戊7 + 甲5 + 壬18 → [0,7)戊 / [7,12)甲 / [12,∞)壬
+            const segs = monthData.分日用事;
+            let hit = segs[segs.length - 1];
+            let accEnd = 0;       // 0-based 累加结束点（exclusive）
+            for (let i = 0; i < segs.length; i++) {
+                accEnd += segs[i].天数;
+                if (i === segs.length - 1) {
+                    hit = segs[i];
+                    break;
+                }
+                if (elapsedDays < accEnd) {
+                    hit = segs[i];
+                    break;
+                }
+            }
+
+            // 保留1位小数
+            const fmtDay = (d) => {
+                if (d < 0) d = 0;
+                return Math.round(d * 10) / 10;
+            };
+
+            return `${hit.藏干}司令（${jieName}第${fmtDay(elapsedDays)}天，距${nextJieName}${fmtDay(remainDays)}天）`;
+        } catch (e) {
+            console.error('getSiLingFromRysl error:', e);
+            return '—';
+        }
+    }
+
+    // 将 tyme4ts 时间对象（SolarTime 等）转为纯字段对象，便于 getLastJieQiDiff 使用
+    function toPlainTime(t) {
+        return {
+            year: t.getYear(),
+            month: t.getMonth(),
+            day: t.getDay(),
+            hour: t.getHour(),
+            minute: t.getMinute(),
+            second: t.getSecond()
+        };
+    }
+
+    /**
+     * 查询胎元
+     * @param {Object} baziTime 出生时间 { year, month, day, hour, minute }
+     * @returns {string} 胎元干支（如 "壬午"）
+     */
+    function getTaiYuan(baziTime) {
+        const solarTime = SolarTime.fromYmdHms(
+            baziTime.year, baziTime.month, baziTime.day,
+            baziTime.hour || 0, baziTime.minute || 0, 0
+        );
+        const eightChar = solarTime.getLunarHour().getEightChar();
+        return eightChar.getFetalOrigin().getName();
+    }
+
+    /**
+     * 查询交运时间（由童限结束时刻距上一节气的时差推导）
+     * @param {Object} baziTime 出生时间 { year, month, day, hour, minute }
+     * @param {number} genderCode 性别，1 为男，0 为女
+     * @returns {{
+     *   jiaoYun: {jieQi, days, hours, totalHours, yearGan, heGan, jiaoYunGan}|null,  // 交运（童限结束时刻）距节气信息
+     *   qishi: {jieQi, days, hours, totalHours, yearGan, heGan, jiaoYunGan}|null,    // 起始（童限开始/出生时刻）距节气信息
+     *   childLimit: ChildLimit,  // 童限对象（供大运/小运继续计算）
+     *   startTime: SolarTime,    // 童限开始时刻
+     *   endTime: SolarTime       // 童限结束时刻（起运时刻）
+     * }}
+     */
+    function getJiaoYunInfo(baziTime, genderCode) {
+        const solarTime = SolarTime.fromYmdHms(
+            baziTime.year, baziTime.month, baziTime.day,
+            baziTime.hour || 0, baziTime.minute || 0, 0
+        );
+        const childLimit = ChildLimit.fromSolarTime(solarTime, genderCode);
+        const startTime = childLimit.info.startTime;
+        const endTime = childLimit.info.endTime;
+
+        let jiaoYun = null;
+        let qishi = null;
+        if (endTime) {
+            jiaoYun = getLastJieQiDiff(toPlainTime(endTime));
+        }
+        if (startTime) {
+            qishi = getLastJieQiDiff(toPlainTime(startTime));
+        }
+        return { jiaoYun, qishi, childLimit, startTime, endTime };
+    }
+
     // 关键：挂到 window 全局
     window.BaZiCalc = {
         findYearsByGanZhi: findYearsByGanZhi,
@@ -413,6 +573,12 @@
         generateLunarMonths: generateLunarMonths,
         getLastJieQiDiff: getLastJieQiDiff,
         dateZhuanhuan: dateZhuanhuan,
-        getBirthYear: getBirthYear
+        getBirthYear: getBirthYear,
+        // 司令分野查询（原 script.js 内的 getSiLingFromRysl，统一封装到本文件）
+        getSiLingFromRysl: getSiLingFromRysl,
+        RYSL_DATA: RYSL_DATA,
+        // 胎元 / 交运时间查询（原 script.js calculateBaZi 内联逻辑，统一封装到本文件）
+        getTaiYuan: getTaiYuan,
+        getJiaoYunInfo: getJiaoYunInfo
     };
 })();

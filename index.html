@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>万年历</title>
-    <link rel="stylesheet" href="style.css?v=20260826a">
+    <link rel="stylesheet" href="style.css?v=20260930b">
 </head>
 <body>
     <div class="container">
@@ -18,17 +18,17 @@
 
         <!-- 万年历视图 -->
         <div id="calendarView" class="view-section">
-            <!-- 年份选择区域 -->
+            <!-- 年份选择区域（每次显示一甲子60年，按钮切换分块） -->
             <div class="year-selector">
-                <button id="prevYear" class="nav-btn" title="上一年">&lt;</button>
+                <button id="prevYear" class="nav-btn" title="上一甲子">&lt;</button>
 
                 <div class="year-display">
                     <span>年份：</span>
-                    <span id="currentYearText" class="current-year">2026</span>
+                    <span id="blockRangeText" class="current-year">1984-2043</span>
                     <span id="ganZhi" class="ganzhi-info"></span>
                 </div>
 
-                <button id="nextYear" class="nav-btn" title="下一年">&gt;</button>
+                <button id="nextYear" class="nav-btn" title="下一甲子">&gt;</button>
             </div>
 
             <!-- 年份列表（每排10个） -->
@@ -55,24 +55,22 @@
     </div>
 
     <script src="lib/tyme4ts.mjs?v=20260828a"></script>
-    <script src="dayunliunianliuyue.js"></script>
+    <script src="dayunliunianliuyue.js?v=20260929b"></script>
 
     <!-- 模块：数据存储 -->
     <script src="modules/storage.js"></script>
     <!-- 模块：UI 工具 -->
-    <script src="modules/ui.js"></script>
+    <script src="modules/ui.js?v=20260930b"></script>
     <!-- 模块：缓存管理 -->
     <script src="modules/cache.js"></script>
     <!-- 模块：命例列表 -->
-    <script src="modules/list.js"></script>
+    <script src="modules/list.js?v=20260930a"></script>
     <!-- 模块：导航切换 -->
     <script src="modules/navigation.js"></script>
-    <!-- 模块：事件记录 -->
-    <script src="modules/notes.js?v=20260828e"></script>
     <!-- 模块：案例详情 -->
-    <script src="modules/detail.js?v=20260828g"></script>
+    <script src="modules/detail.js?v=20260930b"></script>
 
     <!-- 入口文件 -->
-    <script src="script.js?v=20260828b"></script>
+    <script src="script.js?v=20260930a"></script>
 </body>
 </html>
